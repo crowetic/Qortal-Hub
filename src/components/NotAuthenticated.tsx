@@ -41,7 +41,7 @@ import { nodeDisplay } from '../utils/helpers.ts';
 import { markNodeSelectionExplicit } from '../utils/nodeSelection';
 
 export const manifestData = {
-  version: '1.0.0',
+  version: '1.0.1',
 };
 
 export const HtmlTooltip = styled(({ className, ...props }: TooltipProps) => (
