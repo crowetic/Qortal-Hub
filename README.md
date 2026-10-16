@@ -37,6 +37,7 @@ You can use Qortal Hub without installing anything on your computer or mobile de
 
 ## Documentation
 
+- [Headless Hub daemon and Q-Chat API](./docs/hub-daemon.md)
 - [Reticulum integration](./docs/reticulum.md)
 - [Group audio calls](./docs/group-audio-calls.md)
 - [Development setup](./docs/development.md)

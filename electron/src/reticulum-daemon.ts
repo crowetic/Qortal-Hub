@@ -1,3 +1,11 @@
+import {
+  DEFAULT_RETICULUM_HUBS,
+  type ReticulumHubEndpoint,
+} from './reticulum-hubs';
+export {
+  DEFAULT_RETICULUM_HUBS,
+  type ReticulumHubEndpoint,
+} from './reticulum-hubs';
 /**
  * Spawns the Reticulum Network Stack daemon (rnsd).
  *
@@ -35,6 +43,8 @@ import {
 } from './logger';
 import type { ReticulumMeshConfigSlice } from './reticulum-mesh-store';
 import type { ReticulumBridge } from './reticulum-bridge';
+import { configureNativeRuntimeEnvironment } from './native-runtime-environment';
+import { configureDefaultReticulumBridgePlatform } from './reticulum-bridge-platform';
 import {
   getBundledMeshNetworkIdentityPath,
   getBundledMeshNetworkPassphrasePath,
@@ -186,19 +196,6 @@ export type ReticulumBridgeState =
   | 'starting'
   | 'ready'
   | 'degraded';
-export type ReticulumHubEndpoint = {
-  name: string;
-  host: string;
-  port: number;
-  /**
-   * Outbound hub link. `BackboneInterface` remotes use `remote` on Linux.
-   * Non-Linux hosts fall back to TCPClientInterface (Backbone stack is Linux-only in RNS).
-   */
-  interfaceType?: 'TCPClientInterface' | 'BackboneInterface';
-  /** Optional Reticulum virtual network segment (see RNS interface `network_name`). */
-  networkName?: string;
-};
-
 /** RNS: BackboneInterface remotes stay Backbone on Linux; without Linux, use TCP client. */
 function effectiveHubInterfaceType(
   hub: ReticulumHubEndpoint
@@ -209,52 +206,6 @@ function effectiveHubInterfaceType(
   }
   return want;
 }
-
-export const DEFAULT_RETICULUM_HUBS: readonly ReticulumHubEndpoint[] =
-  Object.freeze([
-    {
-      name: 'Backbone Client Qortal Hub',
-      host: 'phantom.mobilefabrik.com',
-      port: 4400,
-      interfaceType: 'BackboneInterface',
-      networkName: RETICULUM_QORTAL_HUB_NETWORK_NAME,
-    },
-    {
-      name: 'Crowetic Reticulum Hub',
-      host: 'reticulum.qortal.link',
-      port: 4444,
-      interfaceType: 'BackboneInterface',
-      networkName: RETICULUM_QORTAL_HUB_NETWORK_NAME,
-    },
-    {
-      name: 'Crowetic Reticulum Hub 2',
-      host: 'reticulum2.qortal.link',
-      port: 4444,
-      interfaceType: 'BackboneInterface',
-      networkName: RETICULUM_QORTAL_HUB_NETWORK_NAME,
-    },
-    {
-      name: 'Crowetic Reticulum Hub 3',
-      host: 'reticulum3.qortal.link',
-      port: 4444,
-      interfaceType: 'BackboneInterface',
-      networkName: RETICULUM_QORTAL_HUB_NETWORK_NAME,
-    },
-    {
-      name: 'Crowetic Reticulum Hub 4',
-      host: 'reticulum4.qortal.link',
-      port: 4444,
-      interfaceType: 'BackboneInterface',
-      networkName: RETICULUM_QORTAL_HUB_NETWORK_NAME,
-    },
-    {
-      name: 'Crowetic Reticulum Hub 5',
-      host: 'reticulum5.qortal.link',
-      port: 4444,
-      interfaceType: 'BackboneInterface',
-      networkName: RETICULUM_QORTAL_HUB_NETWORK_NAME,
-    },
-  ]);
 
 let child: ChildProcess | null = null;
 let lastStartMode: ReticulumDaemonMode = null;
@@ -4231,3 +4182,23 @@ export function registerReticulumIpcHandlers(): void {
     }
   );
 }
+
+// Desktop bootstrapping supplies platform services; native chat/bridge code also
+// runs in the Node daemon, which supplies its own environment and process owner.
+configureNativeRuntimeEnvironment({
+  path: (name) => app.getPath(name),
+  resources: () =>
+    app.isPackaged
+      ? path.join(process.resourcesPath, 'reticulum')
+      : path.join(__dirname, '..', '..', 'resources'),
+  packaged: () => app.isPackaged,
+  ready: () => app.isReady(),
+});
+configureDefaultReticulumBridgePlatform({
+  configDir: getReticulumConfigDir,
+  identityPath: getReticulumBridgeIdentityPath,
+  instanceIndex: getReticulumInstanceIndex,
+  sourceEnvironment: getReticulumSourceEnvExtra,
+  launch: resolveReticulumPythonLaunch,
+  persistTransportState: persistReticulumSharedTransportState,
+});

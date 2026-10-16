@@ -79,6 +79,11 @@ import { buildAudioSurfaceScheme } from './audio-window-policy';
 import { setAudioSurfaceHttpsInstanceIndex } from './audio-surface-https';
 import { isReticulumRuntimeEnabled } from './reticulum-runtime-state';
 import { rebindReticulumBridgeConsumers } from './reticulum-bridge-rebind';
+import { getReticulumChatManager } from './reticulum-chat';
+import { readHubApiConfig } from './hub-api/config';
+import { createExternalAuthAuthorizer, HubApiError } from './hub-api/auth';
+import { HubApiRuntime } from './hub-api/runtime';
+import { startHubApi } from './hub-api/server';
 
 import * as net from 'net';
 
@@ -127,7 +132,10 @@ app.commandLine.appendSwitch(
   'enable-blink-features',
   Array.from(
     new Set([
-      ...app.commandLine.getSwitchValue('enable-blink-features').split(',').filter(Boolean),
+      ...app.commandLine
+        .getSwitchValue('enable-blink-features')
+        .split(',')
+        .filter(Boolean),
       'SpeakerSelection',
     ])
   ).join(',')
@@ -151,6 +159,7 @@ export function setIsQuitting(value: boolean) {
 }
 
 let shutdownPromise: Promise<void> | null = null;
+let hubApi: Awaited<ReturnType<typeof startHubApi>> | null = null;
 let shutdownComplete = false;
 let shutdownExitScheduled = false;
 let reticulumWakeRecovery: Promise<void> | null = null;
@@ -300,6 +309,12 @@ function performAppShutdown(reason: string): Promise<void> {
   }
   shutdownPromise = (async () => {
     loggerLog(`[App] Shutdown reason=${reason}`);
+    try {
+      await hubApi?.close();
+      hubApi = null;
+    } catch (error) {
+      loggerError('[Hub API] Shutdown failed:', error);
+    }
     try {
       stopReticulumManagers();
     } catch (error) {
@@ -735,6 +750,38 @@ async function setupMultiInstanceUserData(
     loggerLog(
       '[Legacy] Legacy P2P, chat, and STUN startup are disabled by feature flag.'
     );
+  }
+
+  // Phase one API uses the existing account runtime; disabled unless explicitly configured.
+  try {
+    const config = readHubApiConfig();
+    if (config) {
+      hubApi = await startHubApi(
+        config,
+        createExternalAuthAuthorizer(config),
+        async () => {
+          const settings = await readAppSettings();
+          const manager = getReticulumChatManager();
+          if (
+            !manager ||
+            settings.reticulumEnabled === false ||
+            settings.reticulumChatEnabled !== true
+          ) {
+            throw new HubApiError(503, 'chat_runtime_unavailable');
+          }
+          return new HubApiRuntime(
+            manager,
+            config.address,
+            () =>
+              getReticulumChatManager() === manager &&
+              isReticulumRuntimeEnabled()
+          );
+        }
+      );
+      loggerLog(`[Hub API] Listening on ${config.host}:${config.port}`);
+    }
+  } catch (error) {
+    loggerError('[Hub API] Startup failed; API is unavailable:', error);
   }
 
   // Also set on main window session (same as default when no partition; ensures activate/recreate path is covered)

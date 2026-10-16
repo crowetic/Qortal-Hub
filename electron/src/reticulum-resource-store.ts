@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as nodeCrypto from 'crypto';
 import * as os from 'os';
 import * as path from 'path';
-import { app } from 'electron';
+import { nativeRuntimeEnvironment } from './native-runtime-environment';
 import { log as loggerLog, warn as loggerWarn } from './logger';
 import { ReticulumResourceWorkerPool } from './reticulum-resource-worker-pool';
 
@@ -239,11 +239,11 @@ export function getReticulumResourceFreeDiskReserveBytes(totalBytes: number): nu
 }
 
 function defaultReticulumResourceRootDir(): string {
-  return path.join(app.getPath('appData'), 'qortal-shared', 'reticulum-resources');
+  return path.join(nativeRuntimeEnvironment().path('appData'), 'qortal-shared', 'reticulum-resources');
 }
 
 function defaultReticulumResourceDbPath(): string {
-  return path.join(app.getPath('appData'), 'qortal-shared', 'reticulum-resources.db');
+  return path.join(nativeRuntimeEnvironment().path('appData'), 'qortal-shared', 'reticulum-resources.db');
 }
 
 function safeFileName(value: string): string {

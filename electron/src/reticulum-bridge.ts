@@ -1,5 +1,5 @@
 import { ChildProcess, spawn, spawnSync } from 'child_process';
-import { app } from 'electron';
+import { nativeRuntimeEnvironment } from './native-runtime-environment';
 import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
@@ -12,15 +12,12 @@ import type {
 } from './presence';
 import { buildPresenceSignedFields, getPresenceManager } from './presence';
 import {
-  getReticulumBridgeIdentityPath,
-  getReticulumConfigDir,
-  getReticulumInstanceIndex,
-  getReticulumSourceEnvExtra,
-  persistReticulumSharedTransportState,
-  resolveReticulumPythonLaunch,
+  defaultReticulumBridgePlatform,
+  type ReticulumBridgePlatform,
+  type ReticulumPythonLaunch,
   type ReticulumBridgeState,
   type ReticulumReachability,
-} from './reticulum-daemon';
+} from './reticulum-bridge-platform';
 import { withReticulumPythonDiagnostics } from './reticulum-python-diagnostics';
 import {
   error as loggerError,
@@ -990,8 +987,8 @@ function bridgeExeName(): string {
 
 function getFrozenBridgePath(): string {
   const exeName = bridgeExeName();
-  if (app.isPackaged) {
-    const base = path.join(process.resourcesPath, 'reticulum');
+  if (nativeRuntimeEnvironment().packaged()) {
+    const base = nativeRuntimeEnvironment().resources();
     const archSpecific =
       process.platform === 'darwin'
         ? path.join(base, `darwin-${process.arch}`, exeName)
@@ -1003,13 +1000,16 @@ function getFrozenBridgePath(): string {
 }
 
 function getBridgeScriptPath(): string {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'reticulum', 'presence_bridge.py');
-  }
-  return path.join(__dirname, '..', '..', 'resources', 'presence_bridge.py');
+  return path.join(
+    nativeRuntimeEnvironment().resources(),
+    'presence_bridge.py'
+  );
 }
 
-function resolveBridgeLaunch(configDir: string):
+function resolveBridgeLaunch(
+  configDir: string,
+  platform: ReticulumBridgePlatform
+):
   | {
       cmd: string;
       args: string[];
@@ -1017,13 +1017,10 @@ function resolveBridgeLaunch(configDir: string):
       mode: 'frozen';
       envExtra?: Record<string, string>;
     }
-  | ReturnType<typeof resolveReticulumPythonLaunch> {
+  | ReticulumPythonLaunch {
   // Dev (`npm run electron:start`): always use `presence_bridge.py` so edits apply; ignore PyInstaller binary in resources/reticulum/.
-  if (!app.isPackaged) {
-    return resolveReticulumPythonLaunch(getBridgeScriptPath(), [
-      '--config',
-      configDir,
-    ]);
+  if (!nativeRuntimeEnvironment().packaged()) {
+    return platform.launch(getBridgeScriptPath(), ['--config', configDir]);
   }
 
   const frozenBridge = getFrozenBridgePath();
@@ -1036,10 +1033,7 @@ function resolveBridgeLaunch(configDir: string):
     };
   }
 
-  return resolveReticulumPythonLaunch(getBridgeScriptPath(), [
-    '--config',
-    configDir,
-  ]);
+  return platform.launch(getBridgeScriptPath(), ['--config', configDir]);
 }
 
 function signalBridgeProcessTree(
@@ -1225,6 +1219,13 @@ type AudioBinaryWriteQueueItem = {
 };
 
 export class ReticulumBridge extends EventEmitter implements PresenceTransport {
+  constructor(private readonly suppliedPlatform?: ReticulumBridgePlatform) {
+    super();
+  }
+
+  private get platform(): ReticulumBridgePlatform {
+    return this.suppliedPlatform ?? defaultReticulumBridgePlatform();
+  }
   readonly kind = 'reticulum' as const;
 
   private child: ChildProcess | null = null;
@@ -1440,7 +1441,9 @@ export class ReticulumBridge extends EventEmitter implements PresenceTransport {
       .trim()
       .toLowerCase();
     if (!hash) return;
-    getPresenceManager()?.markReticulumOverlayPeerVerified(hash, source);
+    (
+      this.suppliedPlatform?.presenceManager?.() ?? getPresenceManager()
+    )?.markReticulumOverlayPeerVerified(hash, source);
   }
 
   subscribe(handlers: PresenceTransportHandlers): () => void {
@@ -1545,7 +1548,7 @@ export class ReticulumBridge extends EventEmitter implements PresenceTransport {
       }
     }
     this.desiredRunning = true;
-    const configDir = getReticulumConfigDir();
+    const configDir = this.platform.configDir();
     if (
       this.launchConfigDir &&
       this.launchConfigDir !== configDir &&
@@ -3387,10 +3390,23 @@ export class ReticulumBridge extends EventEmitter implements PresenceTransport {
     );
   }
 
-  async relayTicketRequest(identity: string, path: string, data: Record<string, unknown>): Promise<Record<string, any>> {
+  async relayTicketRequest(
+    identity: string,
+    path: string,
+    data: Record<string, unknown>
+  ): Promise<Record<string, any>> {
     await this.start();
-    const result = await this.sendCommand('relay_ticket_request', { identity, path, data });
-    if (!result.ok || result.payload?.error) throw new Error(String(result.payload?.error || result.error || 'RELAY_AUTH_UNAVAILABLE'));
+    const result = await this.sendCommand('relay_ticket_request', {
+      identity,
+      path,
+      data,
+    });
+    if (!result.ok || result.payload?.error)
+      throw new Error(
+        String(
+          result.payload?.error || result.error || 'RELAY_AUTH_UNAVAILABLE'
+        )
+      );
     return result.payload ?? {};
   }
 
@@ -3410,7 +3426,9 @@ export class ReticulumBridge extends EventEmitter implements PresenceTransport {
     });
     if (!resp.ok || !Array.isArray(resp.payload?.relays)) return [];
     return resp.payload.relays.filter(
-      (value): value is {
+      (
+        value
+      ): value is {
         host: string;
         port: number;
         serverName: string;
@@ -3796,7 +3814,7 @@ export class ReticulumBridge extends EventEmitter implements PresenceTransport {
 
   private async spawnAndHandshake(configDir: string): Promise<void> {
     this.resetStdoutState();
-    const launch = resolveBridgeLaunch(configDir);
+    const launch = resolveBridgeLaunch(configDir, this.platform);
     if ('error' in launch) {
       this.transitionToDegraded(launch.error);
       throw new Error(launch.error);
@@ -3805,7 +3823,7 @@ export class ReticulumBridge extends EventEmitter implements PresenceTransport {
     loggerLog(
       `[ReticulumBridge] Launching bridge mode=${launch.mode} cmd=${launch.cmd}`
     );
-    const identityPath = getReticulumBridgeIdentityPath();
+    const identityPath = this.platform.identityPath();
     fs.mkdirSync(path.dirname(identityPath), { recursive: true });
     this.gameTransportToken = randomBytes(32).toString('hex');
     this.gameTransportInstanceId = randomUUID();
@@ -3813,7 +3831,7 @@ export class ReticulumBridge extends EventEmitter implements PresenceTransport {
     const env: NodeJS.ProcessEnv = withReticulumPythonDiagnostics(
       {
         ...process.env,
-        ...getReticulumSourceEnvExtra(),
+        ...this.platform.sourceEnvironment(),
         ...(launch.envExtra ?? {}),
         PYTHONUNBUFFERED: '1',
         QORTAL_RNS_LINK_TRACE: process.env.QORTAL_RNS_LINK_TRACE ?? '0',
@@ -3824,10 +3842,12 @@ export class ReticulumBridge extends EventEmitter implements PresenceTransport {
         // rnsd owns configDir/logfile. Each simultaneously supported app
         // instance gets a separate bridge log so independent Python processes
         // can never race while rotating the same file.
-        QORTAL_RNS_LOG_FILE: path.join(
-          configDir,
-          `logfile.bridge.${getReticulumInstanceIndex()}`
-        ),
+        QORTAL_RNS_LOG_FILE:
+          this.platform.logPath?.() ??
+          path.join(
+            configDir,
+            `logfile.bridge.${this.platform.instanceIndex()}`
+          ),
         // The bridge is detached on Unix so Electron can terminate its whole
         // process group. Give it an explicit owner as well: if Electron is
         // killed before its normal shutdown handler runs, the bridge must not
@@ -3836,10 +3856,14 @@ export class ReticulumBridge extends EventEmitter implements PresenceTransport {
         QORTAL_RETICULUM_IDENTITY_PATH: identityPath,
         QORTAL_LAND_GAMES_TOKEN: this.gameTransportToken,
         QORTAL_LAND_GAMES_INSTANCE_ID: this.gameTransportInstanceId,
-        QORTAL_LAND_GAMES_DEV: app.isPackaged ? '0' : '1',
+        QORTAL_LAND_GAMES_DEV: nativeRuntimeEnvironment().packaged()
+          ? '0'
+          : '1',
         QORTAL_LAND_REALTIME_TOKEN: this.gameTransportToken,
         QORTAL_LAND_REALTIME_INSTANCE_ID: this.gameTransportInstanceId,
-        QORTAL_LAND_REALTIME_DEV: app.isPackaged ? '0' : '1',
+        QORTAL_LAND_REALTIME_DEV: nativeRuntimeEnvironment().packaged()
+          ? '0'
+          : '1',
       },
       'presence-bridge',
       configDir
@@ -4060,17 +4084,19 @@ export class ReticulumBridge extends EventEmitter implements PresenceTransport {
     const frame: BridgeCmdFrame = { type: 'cmd', action, id, payload };
     const wire = JSON.stringify(frame) + '\n';
     const timeoutMs =
-      action === 'relay_ticket_request' ? 28_000 : action === 'qapp_rns_connect'
-        ? 45_000
-        : action === 'qapp_rns_request'
-          ? Math.min(
-              125_000,
-              Math.max(
-                REQUEST_TIMEOUT_MS,
-                Number(payload?.timeoutMs ?? 30_000) + 5_000
+      action === 'relay_ticket_request'
+        ? 28_000
+        : action === 'qapp_rns_connect'
+          ? 45_000
+          : action === 'qapp_rns_request'
+            ? Math.min(
+                125_000,
+                Math.max(
+                  REQUEST_TIMEOUT_MS,
+                  Number(payload?.timeoutMs ?? 30_000) + 5_000
+                )
               )
-            )
-          : REQUEST_TIMEOUT_MS;
+            : REQUEST_TIMEOUT_MS;
 
     return new Promise<BridgeRespFrame>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -5535,7 +5561,7 @@ export class ReticulumBridge extends EventEmitter implements PresenceTransport {
           meshListenOnline: frame.payload?.meshListenOnline === true,
         };
         if (hubSummary !== 'Unable to read Reticulum interface stats') {
-          persistReticulumSharedTransportState({
+          this.platform.persistTransportState({
             reachability: this.connectivitySnapshot.reachability,
             transportEnabled: this.connectivitySnapshot.transportEnabled,
             configuredHubInterfaces:

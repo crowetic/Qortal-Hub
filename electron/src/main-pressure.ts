@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { nativeRuntimeEnvironment } from './native-runtime-environment';
 import inspector from 'inspector';
 import path from 'path';
 import { mkdir, writeFile } from 'fs/promises';
@@ -199,8 +199,8 @@ async function captureMainCpuProfile(triggerDelayMs: number): Promise<void> {
   const session = new inspector.Session();
   const startedAtMs = nowMs();
   const timestamp = new Date(startedAtMs).toISOString().replace(/[:.]/g, '-');
-  const dir = app.isReady()
-    ? path.join(app.getPath('userData'), 'main-pressure-profiles')
+  const dir = nativeRuntimeEnvironment().ready()
+    ? path.join(nativeRuntimeEnvironment().path('userData'), 'main-pressure-profiles')
     : path.join(process.cwd(), 'main-pressure-profiles');
   const fileName = sanitizeProfileName(
     `main-stall-${timestamp}-${Math.round(triggerDelayMs)}ms.cpuprofile`

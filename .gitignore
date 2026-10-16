@@ -33,6 +33,9 @@ release-builds/
 .env
 
 # reports from scripts
+codegraph-cache/
+/daemon/.venv/
+/daemon/data/
 .agents/skills/i18n/i18n_report*
 *wallet-storage.json
 

@@ -37,6 +37,7 @@ import {
   encodeReticulumAudioBatch,
 } from './reticulum-audio-ipc';
 import { persistReticulumSharedTransportState } from './reticulum-daemon';
+import { configureDefaultReticulumBridgePlatform } from './reticulum-bridge-platform';
 import { error as loggerError } from './logger';
 import { base58Decode, getPresenceManager } from './presence';
 import type { PresenceEnvelope } from './presence';
@@ -47,6 +48,18 @@ import {
   stopReticulumBridge,
   stopReticulumBridgeAndWait,
 } from './reticulum-bridge';
+
+beforeEach(() => {
+  configureDefaultReticulumBridgePlatform({
+    configDir: () => '/tmp/qortal-reticulum-test',
+    identityPath: () =>
+      '/tmp/qortal-userdata/reticulum/presence-bridge.identity',
+    instanceIndex: () => 0,
+    sourceEnvironment: () => ({}),
+    launch: () => ({ error: 'not-used-in-test' }),
+    persistTransportState: persistReticulumSharedTransportState,
+  });
+});
 
 describe('ReticulumBridge presence subscriptions', () => {
   it('logs structured Python bridge error diagnostics', () => {

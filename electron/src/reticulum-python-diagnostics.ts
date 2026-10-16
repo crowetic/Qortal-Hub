@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { nativeRuntimeEnvironment } from './native-runtime-environment';
 import * as path from 'path';
 
 function diagnosticsEnabled(env: NodeJS.ProcessEnv): boolean {
@@ -10,9 +10,7 @@ function diagnosticsEnabled(env: NodeJS.ProcessEnv): boolean {
 }
 
 function diagnosticsResourceDir(): string {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, 'reticulum')
-    : path.join(__dirname, '..', '..', 'resources');
+  return nativeRuntimeEnvironment().resources();
 }
 
 function prependPythonPath(directory: string, existing?: string): string {

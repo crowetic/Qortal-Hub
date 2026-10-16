@@ -1,7 +1,7 @@
 import * as nodeCrypto from 'crypto';
 import { EventEmitter } from 'events';
 import { performance } from 'perf_hooks';
-import { app } from 'electron';
+import { nativeRuntimeEnvironment } from './native-runtime-environment';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
@@ -6618,7 +6618,7 @@ export function verifyReticulumChatGroupKeyResponse(
 
 function defaultReticulumChatDbPath(): string {
   return path.join(
-    app.getPath('appData'),
+    nativeRuntimeEnvironment().path('appData'),
     'qortal-shared',
     'reticulum-chat.db'
   );
@@ -7089,8 +7089,9 @@ export class ReticulumChatManager extends EventEmitter {
   private tempEventBlobPaths = new Set<string>();
   private tempEventBlobLastSweepAt = 0;
   private tempEventBlobSweepPromise: Promise<void> | null = null;
-  private tempEventBlobDeferredSweepTimer: ReturnType<typeof setTimeout> | null =
-    null;
+  private tempEventBlobDeferredSweepTimer: ReturnType<
+    typeof setTimeout
+  > | null = null;
   private backgroundAuthorGapRepairTimer: ReturnType<typeof setTimeout> | null =
     null;
   private backgroundAuthorGapRepairDueAt = 0;
@@ -9627,6 +9628,11 @@ export class ReticulumChatManager extends EventEmitter {
         summaries.length
       ),
     };
+  }
+
+  /** Snapshot for account-bound API workers; never expose mutable account state. */
+  getLocalAccountAddresses(): string[] {
+    return [...this.localDmAddresses];
   }
 
   setLocalDmAddresses(addresses: string[]): void {
@@ -27150,10 +27156,8 @@ export class ReticulumChatManager extends EventEmitter {
           previousChannel.readMode ===
             RETICULUM_CHAT_CHANNEL_READ_MODE_ADMINS) &&
         channel.readMode !== RETICULUM_CHAT_CHANNEL_READ_MODE_ADMINS &&
-        this.db.wakeKnownUnavailableRangesForGroup(
-          event.groupId,
-          this.now()
-        ) > 0
+        this.db.wakeKnownUnavailableRangesForGroup(event.groupId, this.now()) >
+          0
       ) {
         this.scheduleBackgroundAuthorGapRepair(1);
       }
@@ -42029,7 +42033,7 @@ export class ReticulumChatManager extends EventEmitter {
 
   private async sweepLegacyTempEventBlobDir(now: number): Promise<void> {
     const legacyDir = path.join(
-      app.getPath('temp'),
+      nativeRuntimeEnvironment().path('temp'),
       RETICULUM_CHAT_LEGACY_TEMP_BLOB_DIR_NAME
     );
     let stats: fs.Stats;
