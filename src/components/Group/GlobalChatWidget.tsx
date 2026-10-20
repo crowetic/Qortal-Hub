@@ -18,6 +18,7 @@ import {
   useTheme,
 } from '@mui/material';
 import MarkChatUnreadIcon from '@mui/icons-material/MarkChatUnread';
+import AlternateEmailIcon from '@mui/icons-material/AlternateEmail';
 import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
 import ForumRoundedIcon from '@mui/icons-material/ForumRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
@@ -34,7 +35,7 @@ import {
   groupChatTimestampsAtom,
   groupsOwnerNamesAtom,
   groupsPropertiesAtom,
-  memberGroupsAtom,
+  memberGroupsWithReticulumChatAtom,
   userInfoAtom,
 } from '../../atoms/global';
 import { sortArrayByTimestampAndGroupName } from '../../utils/time';
@@ -46,7 +47,8 @@ import { MiniDirectThread } from '../Chat/MiniDirectThread';
 import { MiniGroupThread } from '../Chat/MiniGroupThread';
 import { useNameSearch } from '../../hooks/useNameSearch';
 import { validateAddress } from '../../utils/validateAddress';
-import { appHeighOffset, appHeighOffsetPx } from '../Desktop/CustomTitleBar';
+import { appChromeOffset, appChromeOffsetPx } from '../Desktop/CustomTitleBar';
+import { hasInvisibleCharacters } from '../../utils/hasInvisibleCharacters';
 
 export type ChatWidgetTab = 'messages' | 'groups';
 
@@ -81,7 +83,7 @@ export function GlobalChatWidget({
 }: GlobalChatWidgetProps) {
   const theme = useTheme();
   const { t } = useTranslation(['core', 'group', 'auth']);
-  const memberGroups = useAtomValue(memberGroupsAtom) ?? [];
+  const memberGroups = useAtomValue(memberGroupsWithReticulumChatAtom) ?? [];
   const groupsProperties = useAtomValue(groupsPropertiesAtom) ?? {};
   const groupsOwnerNames = useAtomValue(groupsOwnerNamesAtom) ?? {};
   const groupChatTimestamps = useAtomValue(groupChatTimestampsAtom) ?? {};
@@ -114,7 +116,7 @@ export function GlobalChatWidget({
     if (typeof window === 'undefined')
       return { x: 0, width: 380, height: 560 };
     const w = window.innerWidth;
-    const h = window.innerHeight - appHeighOffset;
+    const h = window.innerHeight - appChromeOffset;
     const maxW = Math.min(WIDGET_MAX_WIDTH, w - 48);
     const maxH = Math.min(
       WIDGET_MAX_HEIGHT,
@@ -140,7 +142,7 @@ export function GlobalChatWidget({
 
   const [windowSize, setWindowSize] = useState(() =>
     typeof window !== 'undefined'
-      ? { w: window.innerWidth, h: window.innerHeight - appHeighOffset }
+      ? { w: window.innerWidth, h: window.innerHeight - appChromeOffset }
       : { w: 800, h: 600 }
   );
   const [bottomX, setBottomX] = useState(initialBounds.x);
@@ -221,7 +223,7 @@ export function GlobalChatWidget({
 
   useEffect(() => {
     const onResize = () =>
-      setWindowSize({ w: window.innerWidth, h: window.innerHeight - appHeighOffset });
+      setWindowSize({ w: window.innerWidth, h: window.innerHeight - appChromeOffset });
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
@@ -231,7 +233,7 @@ export function GlobalChatWidget({
     if (!storedBounds || hasAppliedStoredRef.current) return;
     hasAppliedStoredRef.current = true;
     const w = window.innerWidth;
-    const h = window.innerHeight - appHeighOffset;
+    const h = window.innerHeight - appChromeOffset;
     const maxW = Math.min(WIDGET_MAX_WIDTH, w - 48);
     const maxH = Math.min(
       WIDGET_MAX_HEIGHT,
@@ -618,7 +620,7 @@ export function GlobalChatWidget({
                   height: widgetHeight,
                   minHeight: WIDGET_MIN_HEIGHT,
                   maxHeight:
-                    `min(800px, calc(100vh - ${appHeighOffsetPx} - 120px))`,
+                    `min(800px, calc(100vh - ${appChromeOffsetPx} - 120px))`,
                   overflow: 'hidden',
                   visibility: 'visible',
                   opacity: 1,
@@ -1108,6 +1110,10 @@ export function GlobalChatWidget({
                               timeDifferenceForNotificationChats) ||
                             (timestampEnterData[direct?.address] ?? 0) <
                               direct?.timestamp);
+                        const directName = direct?.name || direct?.address;
+                        const hasUnsafeName = Boolean(
+                          direct?.name && hasInvisibleCharacters(direct.name)
+                        );
 
                         return (
                           <ListItem
@@ -1190,7 +1196,7 @@ export function GlobalChatWidget({
                               </Avatar>
                             </ListItemAvatar>
                             <ListItemText
-                              primary={direct?.name || direct?.address}
+                              primary={directName}
                               secondary={
                                 !direct?.timestamp
                                   ? t('core:message.generic.no_messages', {
@@ -1219,6 +1225,14 @@ export function GlobalChatWidget({
                                   fontSize: '15px',
                                   fontWeight: 600,
                                   lineHeight: 1.3,
+                                  ...(hasUnsafeName
+                                    ? {
+                                        textDecorationLine: 'line-through',
+                                        textDecorationThickness: '2px',
+                                        textDecorationColor:
+                                          theme.palette.error.main,
+                                      }
+                                    : {}),
                                 },
                               }}
                               secondaryTypographyProps={{
@@ -1291,14 +1305,18 @@ export function GlobalChatWidget({
                         const groupEnterTimestamp =
                           timestampEnterData[group?.groupId];
                         const hasUnreadGroup =
-                          group?.data &&
-                          groupChatTimestamp &&
-                          group?.sender !== myAddress &&
-                          group?.timestamp &&
-                          ((groupEnterTimestamp == null &&
-                            Date.now() - group?.timestamp <
-                              timeDifferenceForNotificationChats) ||
-                            (groupEnterTimestamp ?? 0) < group?.timestamp);
+                          (group?.reticulumChatSummary?.unreadCount ?? 0) > 0 ||
+                          (group?.data &&
+                            groupChatTimestamp &&
+                            group?.sender !== myAddress &&
+                            group?.timestamp &&
+                            ((groupEnterTimestamp == null &&
+                              Date.now() - group?.timestamp <
+                                timeDifferenceForNotificationChats) ||
+                              (groupEnterTimestamp ?? 0) < group?.timestamp));
+                        const hasReticulumMention =
+                          group?.reticulumChatSummary?.hasUnreadMention === true ||
+                          (group?.reticulumChatSummary?.mentionCount ?? 0) > 0;
                         const groupProperty = groupsProperties[group?.groupId];
                         const isPrivateGroup = groupProperty?.isOpen === false;
                         return (
@@ -1429,6 +1447,16 @@ export function GlobalChatWidget({
                             >
                               {hasUnreadGroup && (
                                 <MarkChatUnreadIcon
+                                  sx={{
+                                    color:
+                                      theme.palette.other?.unread ??
+                                      theme.palette.primary.main,
+                                    fontSize: '18px',
+                                  }}
+                                />
+                              )}
+                              {hasReticulumMention && (
+                                <AlternateEmailIcon
                                   sx={{
                                     color:
                                       theme.palette.other?.unread ??

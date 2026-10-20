@@ -8,6 +8,14 @@ import {
   useTheme,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import {
+  dialogActionsSx,
+  dialogContentSx,
+  dialogContentTextSx,
+  dialogTitleSx,
+  getDialogPaperSx,
+  getDialogPrimaryButtonSx,
+} from './dialogSurface';
 
 type InfoDialogProps = {
   open: boolean;
@@ -17,32 +25,35 @@ type InfoDialogProps = {
 
 export function InfoDialog({ open, message, onClose }: InfoDialogProps) {
   const theme = useTheme();
-  const { t } = useTranslation(['core', 'tutorial']);
+  const { t } = useTranslation(['core', 'group']);
 
   return (
     <Dialog
       open={open}
       aria-labelledby="alert-dialog-title"
       aria-describedby="alert-dialog-description"
+      PaperProps={{
+        sx: getDialogPaperSx(theme, { maxWidth: 420 }),
+      }}
     >
-      <DialogTitle
-        id="alert-dialog-title"
-        sx={{
-          textAlign: 'center',
-          color: theme.palette.text.primary,
-          fontWeight: 'bold',
-          opacity: 1,
-        }}
-      >
-        {t('tutorial:important_info', { postProcess: 'capitalizeAll' })}
+      <DialogTitle id="alert-dialog-title" sx={dialogTitleSx}>
+        {t('group:important_info', { postProcess: 'capitalizeAll' })}
       </DialogTitle>
-      <DialogContent>
-        <DialogContentText id="alert-dialog-description">
+      <DialogContent sx={dialogContentSx}>
+        <DialogContentText
+          id="alert-dialog-description"
+          sx={dialogContentTextSx}
+        >
           {message}
         </DialogContentText>
       </DialogContent>
-      <DialogActions>
-        <Button variant="contained" onClick={onClose} autoFocus>
+      <DialogActions sx={dialogActionsSx}>
+        <Button
+          variant="contained"
+          onClick={onClose}
+          autoFocus
+          sx={getDialogPrimaryButtonSx(theme)}
+        >
           {t('core:action.close', { postProcess: 'capitalizeFirstChar' })}
         </Button>
       </DialogActions>

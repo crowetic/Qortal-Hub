@@ -20,13 +20,7 @@ export const useHandlePrivateApps = () => {
   const [infoSnackCustom, setInfoSnackCustom] = useAtom(infoSnackGlobalAtom);
   const setSortablePinnedApps = useSetAtom(sortablePinnedAppsAtom);
   const setSettingsLocalLastUpdated = useSetAtom(settingsLocalLastUpdatedAtom);
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
 
   const openApp = async (
     privateAppProperties,
@@ -67,7 +61,7 @@ export const useHandlePrivateApps = () => {
         if (!responseData?.ok) {
           if (setLoadingStatePrivateApp) {
             setLoadingStatePrivateApp(
-              t('core:message.generic.unable_download_private_app', {
+              t('core:message.error.download_private_app', {
                 postProcess: 'capitalizeFirstChar',
               })
             );
@@ -84,13 +78,13 @@ export const useHandlePrivateApps = () => {
         if (data?.error) {
           if (setLoadingStatePrivateApp) {
             setLoadingStatePrivateApp(
-              t('core:message.generic.unable_download_private_app', {
+              t('core:message.error.download_private_app', {
                 postProcess: 'capitalizeFirstChar',
               })
             );
           }
           throw new Error(
-            t('core:message.generic.unable_fetch_app', {
+            t('core:message.error.fetch_app', {
               postProcess: 'capitalizeFirstChar',
             })
           );
@@ -98,7 +92,7 @@ export const useHandlePrivateApps = () => {
       } catch (error) {
         if (setLoadingStatePrivateApp) {
           setLoadingStatePrivateApp(
-            t('core:message.generic.unable_download_private_app', {
+            t('core:message.error.download_private_app', {
               postProcess: 'capitalizeFirstChar',
             })
           );
@@ -107,7 +101,6 @@ export const useHandlePrivateApps = () => {
       }
 
       let decryptedData;
-      // eslint-disable-next-line no-useless-catch
       try {
         decryptedData = await window.sendMessage('DECRYPT_QORTAL_GROUP_DATA', {
           base64: data,
@@ -116,7 +109,7 @@ export const useHandlePrivateApps = () => {
         if (decryptedData?.error) {
           if (setLoadingStatePrivateApp) {
             setLoadingStatePrivateApp(
-              t('core:message.generic.unable_decrypt_app', {
+              t('core:message.error.decrypt_app', {
                 postProcess: 'capitalizeFirstChar',
               })
             );
@@ -126,7 +119,7 @@ export const useHandlePrivateApps = () => {
       } catch (error) {
         if (setLoadingStatePrivateApp) {
           setLoadingStatePrivateApp(
-            t('core:message.generic.unable_decrypt_app', {
+            t('core:message.error.decrypt_app', {
               postProcess: 'capitalizeFirstChar',
             })
           );
@@ -146,53 +139,54 @@ export const useHandlePrivateApps = () => {
             }),
           });
 
-          const endpoint = await createEndpoint(
-            `/arbitrary/APP/${privateAppProperties?.name}/zip?preview=true`
-          );
-
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'text/plain',
-            },
-            body: UintToObject?.app,
-          });
-
-          const previewPath = await response.text();
-
-          const refreshfunc = async (tabId, privateAppProperties) => {
-            const checkIfPreviewLinkStillWorksUrl = await createEndpoint(
-              `/render/hash/HmtnZpcRPwisMfprUXuBp27N2xtv5cDiQjqGZo8tbZS?secret=E39WTiG4qBq3MFcMPeRZabtQuzyfHg9ZuR5SgY7nW1YH`
+          const buildPrivatePreview = async () => {
+            const endpoint = await createEndpoint(
+              `/arbitrary/APP/${privateAppProperties?.name}/zip?preview=true`
             );
-            const res = await fetch(checkIfPreviewLinkStillWorksUrl);
-            if (res.ok) {
-              executeEvent('refreshApp', {
-                tabId: tabId,
-              });
-            } else {
-              const endpoint = await createEndpoint(
-                `/arbitrary/APP/${privateAppProperties?.name}/zip?preview=true`
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'text/plain',
+              },
+              body: UintToObject?.app,
+            });
+
+            if (!response.ok) {
+              throw new Error(
+                t('core:message.error.build_app', {
+                  postProcess: 'capitalizeFirstChar',
+                })
               );
+            }
 
-              const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'text/plain',
-                },
-                body: UintToObject?.app,
+            return createEndpoint(await response.text());
+          };
+
+          const previewUrl = await buildPrivatePreview();
+
+          const refreshFunc = async (tabId) => {
+            try {
+              setOpenSnackGlobal(true);
+              setInfoSnackCustom({
+                type: 'info',
+                message: t('core:message.generic.building_app', {
+                  postProcess: 'capitalizeFirstChar',
+                }),
               });
-
-              const previewPath = await response.text();
               executeEvent('updateAppUrl', {
-                tabId: tabId,
-                url: await createEndpoint(previewPath),
+                tabId,
+                url: await buildPrivatePreview(),
               });
-
-              setTimeout(() => {
-                executeEvent('refreshApp', {
-                  tabId: tabId,
-                });
-              }, 300);
+            } catch (error) {
+              setOpenSnackGlobal(true);
+              setInfoSnackCustom({
+                type: 'error',
+                message:
+                  error?.message ||
+                  t('core:message.error.build_app', {
+                    postProcess: 'capitalizeFirstChar',
+                  }),
+              });
             }
           };
 
@@ -202,13 +196,16 @@ export const useHandlePrivateApps = () => {
             : null;
 
           const dataBody = {
-            url: await createEndpoint(previewPath),
+            identifier: privateAppProperties?.identifier,
+            name: privateAppProperties?.name,
+            service: privateAppProperties?.service,
+            url: previewUrl,
             isPreview: true,
             isPrivate: true,
             privateAppProperties: { ...privateAppProperties, logo, appName },
             filePath: '',
             refreshFunc: (tabId) => {
-              refreshfunc(tabId, privateAppProperties);
+              void refreshFunc(tabId);
             },
           };
           executeEvent('addTab', {

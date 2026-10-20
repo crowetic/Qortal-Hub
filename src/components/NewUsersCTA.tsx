@@ -1,4 +1,4 @@
-import { Box, Button, Typography } from '@mui/material';
+import { openHttpUrlExternally } from '../utils/openExternalHttp';
 import { useAtomValue } from 'jotai';
 import { balanceAtom } from '../atoms/global';
 import { Spacer } from '../common/Spacer';
@@ -6,13 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 export const NewUsersCTA = () => {
   const balance = useAtomValue(balanceAtom);
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
 
   if (balance === undefined || +balance > 0) return null;
 
@@ -72,13 +66,7 @@ export const NewUsersCTA = () => {
               backgroundColor: '#4297E2',
             }}
             onClick={() => {
-              if (window?.electronAPI?.openExternal) {
-                window.electronAPI.openExternal(
-                  'https://link.qortal.dev/support'
-                );
-              } else {
-                window.open('https://link.qortal.dev/support', '_blank');
-              }
+              openHttpUrlExternally('https://link.qortal.dev/support');
             }}
           >
             Nextcloud

@@ -6,8 +6,56 @@ const { log, warn } = require('./logger');
 
 module.exports = async function afterPack(context) {
   const { appOutDir, electronPlatformName } = context;
+  const plat = (electronPlatformName || '').toLowerCase();
 
-  if (!electronPlatformName.toLowerCase().includes('linux')) return;
+  const reticulumDir = path.join(appOutDir, 'resources', 'reticulum');
+  const reticulumRuntimeDir = path.join(
+    appOutDir,
+    'resources',
+    'reticulum-runtime'
+  );
+  if (fs.existsSync(reticulumRuntimeDir)) {
+    log('🔧 Removing dev-only reticulum-runtime from packaged app…');
+    fs.rmSync(reticulumRuntimeDir, { recursive: true, force: true });
+  }
+
+  const reticulumExecutables = ['rnsd', 'presence_bridge'];
+  if (plat.includes('linux') || plat.includes('mac') || plat.includes('darwin')) {
+    for (const name of reticulumExecutables) {
+      const exePath = path.join(reticulumDir, name);
+      if (!fs.existsSync(exePath)) continue;
+      log(`🔧 Marking reticulum/${name} executable…`);
+      try {
+        execSync(`chmod 755 "${exePath}"`, { stdio: 'inherit' });
+        log(`✅ reticulum/${name} permissions set.`);
+      } catch (e) {
+        warn(`⚠️ chmod reticulum/${name} failed:`, e.message);
+      }
+    }
+    const privateTransportDir = path.join(
+      appOutDir,
+      'resources',
+      'private-transport'
+    );
+    if (fs.existsSync(privateTransportDir)) {
+      for (const archDir of fs.readdirSync(privateTransportDir)) {
+        const sidecarPath = path.join(
+          privateTransportDir,
+          archDir,
+          'qortal-private-transport'
+        );
+        if (!fs.existsSync(sidecarPath)) continue;
+        try {
+          fs.chmodSync(sidecarPath, 0o755);
+          log(`✅ private-transport/${archDir} permissions set.`);
+        } catch (e) {
+          warn(`⚠️ chmod private-transport/${archDir} failed:`, e.message);
+        }
+      }
+    }
+  }
+
+  if (!plat.includes('linux')) return;
 
   const chromeSandbox = path.join(appOutDir, 'chrome-sandbox');
   if (!fs.existsSync(chromeSandbox)) {
@@ -17,18 +65,7 @@ module.exports = async function afterPack(context) {
 
   log('🔧 Fixing chrome-sandbox permissions...');
   try {
-    // Set setuid bit (rwsr-xr-x)
     execSync(`chmod 4755 "${chromeSandbox}"`, { stdio: 'inherit' });
-
-    // // Needs root to succeed; if not root, we warn but continue
-    // try {
-    //   execSync(`chown root:root "${chromeSandbox}"`, { stdio: 'inherit' });
-    // } catch (e) {
-    //   warn(
-    //     '⚠️ chown root:root failed (not running as root?). AppImage may refuse to run the sandbox.'
-    //   );
-    // }
-
     log('✅ chrome-sandbox permissions fixed.');
   } catch (e) {
     warn('⚠️ Failed to set chrome-sandbox permissions:', e.message);

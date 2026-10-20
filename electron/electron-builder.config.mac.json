@@ -10,6 +10,63 @@
 
   "afterPack": "scripts/afterPack.js",
 
+  "extraResources": [
+    {
+      "from": "resources/private-transport",
+      "to": "private-transport",
+      "filter": ["**/qortal-private-transport"]
+    },
+    {
+      "from": "resources/presence_bridge.py",
+      "to": "reticulum/presence_bridge.py"
+    },
+    {
+      "from": "resources/qortal_python_diagnostics.py",
+      "to": "reticulum/qortal_python_diagnostics.py"
+    },
+    {
+      "from": "resources/sitecustomize.py",
+      "to": "reticulum/sitecustomize.py"
+    },
+    {
+      "from": "resources/qortalland_games.py",
+      "to": "reticulum/qortalland_games.py"
+    },
+    {
+      "from": "resources/qortalland_proximity.py",
+      "to": "reticulum/qortalland_proximity.py"
+    },
+    {
+      "from": "resources/mesh-network.identity",
+      "to": "reticulum/mesh-network.identity"
+    },
+    {
+      "from": "resources/mesh-network.passphrase",
+      "to": "reticulum/mesh-network.passphrase"
+    },
+    {
+      "from": "resources/reticulum",
+      "to": "reticulum",
+      "filter": [
+        "**/*",
+        "!BUNDLE_READY",
+        "!rnsd",
+        "!presence_bridge",
+        "!presence_bridge.py",
+        "!qortal_python_diagnostics.py",
+        "!sitecustomize.py",
+        "!qortalland_games.py",
+        "!qortalland_proximity.py",
+        "!mesh-network.identity",
+        "!mesh-network.passphrase",
+        "!__pycache__/**",
+        "!**/__pycache__/**",
+        "!**/*.pyc",
+        "!test-darwin-*"
+      ]
+    }
+  ],
+
   "afterSign": "scripts/notarize.js",
 
   "files": [
@@ -20,6 +77,17 @@
     "scripts/**/*"
   ],
 
+  "asarUnpack": [
+    "**/*.node",
+    "node_modules/@img/sharp-*/**/*",
+    "node_modules/bindings/**/*",
+    "node_modules/file-uri-to-path/**/*",
+    "build/src/ed25519-verify.worker.js",
+    "build/src/reticulum-chat.worker.js",
+    "build/src/reticulum-resource.worker.js",
+    "build/src/reticulum-media.worker.js"
+  ],
+
   "mac": {
     "icon": "assets/mac/appIcon.icns",
     "hardenedRuntime": true,
@@ -27,7 +95,7 @@
     "entitlements": "buildmac/entitlements.mac.plist",
     "entitlementsInherit": "buildmac/entitlements.mac.plist",
     "category": "public.app-category.utilities",
-    "asarUnpack": ["**/*.node"],
+    "x64ArchFiles": "Contents/Resources/reticulum/**/*",
     "target": ["dmg", "pkg"]
   },
 

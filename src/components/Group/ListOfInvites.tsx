@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Avatar,
   Box,
+  IconButton,
   ListItem,
   ListItemAvatar,
   ListItemButton,
   ListItemText,
   Popover,
+  Tooltip,
 } from '@mui/material';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import {
   AutoSizer,
   CellMeasurer,
@@ -19,6 +22,7 @@ import { getFee } from '../../background/background.ts';
 import { LoadingButton } from '@mui/lab';
 import { getBaseApiReact } from '../../App';
 import { useTranslation } from 'react-i18next';
+import { hasInvisibleCharacters } from '../../utils/hasInvisibleCharacters';
 
 export const getMemberInvites = async (groupNumber) => {
   const response = await fetch(
@@ -29,7 +33,7 @@ export const getMemberInvites = async (groupNumber) => {
 };
 
 const getNames = async (listOfMembers, includeNoNames) => {
-  let members = [];
+  const members = [];
   if (listOfMembers && Array.isArray(listOfMembers)) {
     for (const member of listOfMembers) {
       if (member.invitee) {
@@ -55,18 +59,13 @@ export const ListOfInvites = ({
   setInfoSnack,
   setOpenSnack,
   show,
+  compact = false,
 }) => {
   const [invites, setInvites] = useState([]);
   const [popoverAnchor, setPopoverAnchor] = useState(null); // Track which list item the popover is anchored to
   const [openPopoverIndex, setOpenPopoverIndex] = useState(null); // Track which list item has the popover open
   const [isLoadingCancelInvite, setIsLoadingCancelInvite] = useState(false);
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
   const listRef = useRef(null);
 
   const getInvites = async (groupId) => {
@@ -125,7 +124,9 @@ export const ListOfInvites = ({
               });
               setOpenSnack(true);
               handlePopoverClose();
-              setIsLoadingCancelInvite(true);
+              setInvites((current) =>
+                current.filter((invite) => invite?.invitee !== address)
+              );
               res(response);
               return;
             }
@@ -158,6 +159,10 @@ export const ListOfInvites = ({
 
   const rowRenderer = ({ index, key, parent, style }) => {
     const member = invites[index];
+    const memberLabel = member?.name || member?.invitee;
+    const hasUnsafeMemberName = Boolean(
+      member?.name && hasInvisibleCharacters(member.name)
+    );
 
     return (
       <CellMeasurer
@@ -170,48 +175,69 @@ export const ListOfInvites = ({
         {({ measure }) => (
           <div style={style} onLoad={measure}>
             <ListItem disablePadding>
-              <Popover
-                open={openPopoverIndex === index}
-                anchorEl={popoverAnchor}
-                onClose={handlePopoverClose}
-                anchorOrigin={{
-                  vertical: 'bottom',
-                  horizontal: 'center',
-                }}
-                transformOrigin={{
-                  vertical: 'top',
-                  horizontal: 'center',
-                }}
-                style={{ marginTop: '8px' }}
-              >
-                <Box
-                  sx={{
-                    alignItems: 'center',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '10px',
-                    height: '250px',
-                    padding: '10px',
-                    width: '325px',
+              {!compact && (
+                <Popover
+                  open={openPopoverIndex === index}
+                  anchorEl={popoverAnchor}
+                  onClose={handlePopoverClose}
+                  anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: 'center',
                   }}
+                  transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'center',
+                  }}
+                  style={{ marginTop: '8px' }}
                 >
-                  <LoadingButton
-                    loading={isLoadingCancelInvite}
-                    loadingPosition="start"
-                    variant="contained"
-                    onClick={() => handleCancelInvitation(member?.invitee)}
+                  <Box
+                    sx={{
+                      alignItems: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      height: '250px',
+                      padding: '10px',
+                      width: '325px',
+                    }}
                   >
-                    {t('core:action.cancel_invitation', {
-                      postProcess: 'capitalizeFirstChar',
-                    })}
-                  </LoadingButton>
-                </Box>
-              </Popover>
+                    <LoadingButton
+                      loading={isLoadingCancelInvite}
+                      loadingPosition="start"
+                      variant="contained"
+                      onClick={() => handleCancelInvitation(member?.invitee)}
+                    >
+                      {t('core:action.cancel_invitation', {
+                        postProcess: 'capitalizeFirstChar',
+                      })}
+                    </LoadingButton>
+                  </Box>
+                </Popover>
+              )}
 
               <ListItemButton
-                onClick={(event) => handlePopoverOpen(event, index)}
+                onClick={
+                  compact
+                    ? undefined
+                    : (event) => handlePopoverOpen(event, index)
+                }
+                sx={{
+                  borderRadius: compact ? '6px' : undefined,
+                  minHeight: compact ? 48 : undefined,
+                  px: compact ? 1 : undefined,
+                  py: compact ? 0.5 : undefined,
+                  '& .compact-row-action': {
+                    opacity: 0,
+                    pointerEvents: 'none',
+                    transition: 'opacity 120ms ease',
+                  },
+                  '&:hover .compact-row-action': {
+                    opacity: 1,
+                    pointerEvents: 'auto',
+                  },
+                }}
               >
-                <ListItemAvatar>
+                <ListItemAvatar sx={{ minWidth: compact ? 40 : undefined }}>
                   <Avatar
                     alt={member?.name}
                     src={
@@ -219,10 +245,57 @@ export const ListOfInvites = ({
                         ? `${getBaseApiReact()}/arbitrary/THUMBNAIL/${member?.name}/qortal_avatar?async=true`
                         : ''
                     }
+                    sx={{
+                      height: compact ? 32 : undefined,
+                      width: compact ? 32 : undefined,
+                    }}
                   />
                 </ListItemAvatar>
 
-                <ListItemText primary={member?.name || member?.invitee} />
+                <ListItemText
+                  primary={memberLabel}
+                  primaryTypographyProps={{
+                    sx: {
+                      fontSize: compact ? 13 : undefined,
+                      fontWeight: compact ? 700 : undefined,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      textTransform: compact ? 'capitalize' : undefined,
+                      whiteSpace: 'nowrap',
+                      ...(hasUnsafeMemberName
+                        ? {
+                            textDecorationLine: 'line-through',
+                            textDecorationThickness: '2px',
+                            textDecorationColor: 'error.main',
+                          }
+                        : {}),
+                    },
+                  }}
+                />
+                {compact && (
+                  <Tooltip title="Cancel Invitation">
+                    <IconButton
+                      className="compact-row-action"
+                      disabled={isLoadingCancelInvite}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleCancelInvitation(member?.invitee);
+                      }}
+                      size="small"
+                      sx={{
+                        color: 'error.main',
+                        flexShrink: 0,
+                        height: 28,
+                        width: 28,
+                        '&:hover': {
+                          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        },
+                      }}
+                    >
+                      <CloseRoundedIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
               </ListItemButton>
             </ListItem>
           </div>
@@ -232,18 +305,28 @@ export const ListOfInvites = ({
   };
 
   return (
-    <div>
-      <p>
-        {t('group:invitees_list', {
-          postProcess: 'capitalizeFirstChar',
-        })}
-      </p>
+    <div
+      style={{
+        display: 'flex',
+        flex: 1,
+        flexDirection: 'column',
+        minHeight: 0,
+      }}
+    >
+      {!compact && (
+        <p>
+          {t('group:invitees_list', {
+            postProcess: 'capitalizeFirstChar',
+          })}
+        </p>
+      )}
       <div
         style={{
           display: 'flex',
           flexDirection: 'column',
           flexShrink: 1,
-          height: '500px',
+          height: compact ? '100%' : '500px',
+          minHeight: 0,
           position: 'relative',
           width: '100%',
         }}
@@ -255,9 +338,9 @@ export const ListOfInvites = ({
               width={width}
               height={height}
               rowCount={invites.length}
-              rowHeight={cache.rowHeight}
+              rowHeight={compact ? 48 : cache.rowHeight}
               rowRenderer={rowRenderer}
-              deferredMeasurementCache={cache}
+              deferredMeasurementCache={compact ? undefined : cache}
             />
           )}
         </AutoSizer>

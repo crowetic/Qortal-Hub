@@ -27,6 +27,16 @@ import { decodeIfEncoded } from '../../utils/decode';
 import { useTranslation } from 'react-i18next';
 import { downloadFromLocation } from '../../utils/downloadFromLocation';
 
+const encodeQdnPathSegment = (value) => {
+  const rawValue = String(value ?? '');
+
+  try {
+    return encodeURIComponent(decodeURIComponent(rawValue));
+  } catch {
+    return encodeURIComponent(rawValue);
+  }
+};
+
 export const AttachmentCard = ({
   resourceData,
   resourceDetails,
@@ -41,13 +51,7 @@ export const AttachmentCard = ({
   const [isOpen, setIsOpen] = useState(true);
   const { downloadResource } = useContext(QORTAL_APP_CONTEXT);
   const theme = useTheme();
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
 
   const formatETA = (seconds: number | undefined) => {
     if (!seconds || seconds <= 0) return null;
@@ -83,7 +87,7 @@ export const AttachmentCard = ({
     let blobUrl;
     try {
       const { name, service, identifier, key } = resourceData;
-      const url = `${getBaseApiReact()}/arbitrary/${service}/${name}/${identifier}?encoding=base64`;
+      const url = `${getBaseApiReact()}/arbitrary/${encodeQdnPathSegment(service)}/${encodeQdnPathSegment(name)}/${encodeQdnPathSegment(identifier)}?encoding=base64`;
       const res = await fetch(url);
       const data = await res.text();
       let decryptedData;

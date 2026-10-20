@@ -1,0 +1,20 @@
+# User service template: adjust paths and Node executable before installing.
+[Unit]
+Description=Headless Qortal Hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/git-repos/crowetic/Qortal-Hub/daemon
+EnvironmentFile=%h/.config/qortal-hub-daemon.env
+ExecStart=/usr/bin/node %h/git-repos/crowetic/Qortal-Hub/daemon/dist/index.js
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=45
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

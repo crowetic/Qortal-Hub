@@ -47,6 +47,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useSortedMyNames } from '../../hooks/useSortedMyNames';
 import { Label } from '../../styles/App-styles.ts';
+import { filterPrivateGroups } from './privateGroups';
 
 const maxFileSize = 50 * 1024 * 1024; // 50MB
 
@@ -65,8 +66,9 @@ export const AppsPrivate = ({ myName, myAddress }) => {
   const [myGroupsWhereIAmAdminFromGlobal] = useAtom(myGroupsWhereIAmAdminAtom);
 
   const myGroupsWhereIAmAdmin = useMemo(() => {
-    return myGroupsWhereIAmAdminFromGlobal?.filter(
-      (group) => groupsProperties[group?.groupId]?.isOpen === false
+    return filterPrivateGroups(
+      myGroupsWhereIAmAdminFromGlobal,
+      groupsProperties
     );
   }, [myGroupsWhereIAmAdminFromGlobal, groupsProperties]);
 
@@ -77,18 +79,10 @@ export const AppsPrivate = ({ myName, myAddress }) => {
   const [memberGroups] = useAtom(memberGroupsAtom);
 
   const theme = useTheme();
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
 
   const myGroupsPrivate = useMemo(() => {
-    return memberGroups?.filter(
-      (group) => groupsProperties[group?.groupId]?.isOpen === false
-    );
+    return filterPrivateGroups(memberGroups, groupsProperties);
   }, [memberGroups, groupsProperties]);
 
   const [privateAppValues, setPrivateAppValues] = useState({
@@ -163,7 +157,38 @@ export const AppsPrivate = ({ myName, myAddress }) => {
 
   const publishPrivateApp = async () => {
     try {
-      if (selectedGroup === 0) return;
+      if (selectedGroup === 0) {
+        setOpenSnackGlobal(true);
+        setInfoSnackCustom({
+          type: 'error',
+          message: t('group:message.generic.no_selection', {
+            postProcess: 'capitalizeFirstChar',
+          }),
+        });
+        return;
+      }
+
+      if (!name || name === 0) {
+        setOpenSnackGlobal(true);
+        setInfoSnackCustom({
+          type: 'error',
+          message: t('core:action.select_name_app', {
+            postProcess: 'capitalizeFirstChar',
+          }),
+        });
+        return;
+      }
+
+      if (!file) {
+        setOpenSnackGlobal(true);
+        setInfoSnackCustom({
+          type: 'error',
+          message: t('core:message.generic.select_zip', {
+            postProcess: 'capitalizeFirstChar',
+          }),
+        });
+        return;
+      }
 
       if (!logo)
         throw new Error(
@@ -438,15 +463,13 @@ export const AppsPrivate = ({ myName, myAddress }) => {
                       })}
                     </MenuItem>
 
-                    {myGroupsPrivate
-                      ?.filter((item) => !item?.isOpen)
-                      .map((group) => {
-                        return (
-                          <MenuItem key={group?.groupId} value={group?.groupId}>
-                            {group?.groupName}
-                          </MenuItem>
-                        );
-                      })}
+                    {myGroupsPrivate?.map((group) => {
+                      return (
+                        <MenuItem key={group?.groupId} value={group?.groupId}>
+                          {group?.groupName}
+                        </MenuItem>
+                      );
+                    })}
                   </Select>
                 </Box>
 
@@ -655,15 +678,13 @@ export const AppsPrivate = ({ myName, myAddress }) => {
                       })}
                     </MenuItem>
 
-                    {myGroupsWhereIAmAdmin
-                      ?.filter((item) => !item?.isOpen)
-                      .map((group) => {
-                        return (
-                          <MenuItem key={group?.groupId} value={group?.groupId}>
-                            {group?.groupName}
-                          </MenuItem>
-                        );
-                      })}
+                    {myGroupsWhereIAmAdmin?.map((group) => {
+                      return (
+                        <MenuItem key={group?.groupId} value={group?.groupId}>
+                          {group?.groupName}
+                        </MenuItem>
+                      );
+                    })}
                   </Select>
                 </Box>
 
@@ -759,6 +780,10 @@ export const AppsPrivate = ({ myName, myAddress }) => {
 
                 <Button
                   disabled={
+                    !name ||
+                    name === 0 ||
+                    !file ||
+                    !logo ||
                     !newPrivateAppValues.name ||
                     !newPrivateAppValues.service ||
                     !newPrivateAppValues.identifier ||

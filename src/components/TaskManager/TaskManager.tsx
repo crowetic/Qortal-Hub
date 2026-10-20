@@ -1,44 +1,77 @@
 import {
+  Box,
   List,
   ListItemButton,
-  ListItemIcon,
   ListItemText,
-  Collapse,
   IconButton,
+  Popover,
+  Tooltip,
+  Typography,
   useTheme,
+  type TooltipProps,
 } from '@mui/material';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import PendingIcon from '@mui/icons-material/Pending';
 import TaskAltIcon from '@mui/icons-material/TaskAlt';
-import ExpandLess from '@mui/icons-material/ExpandLess';
-import ExpandMore from '@mui/icons-material/ExpandMore';
 import { getBaseApiReact } from '../../App';
 import { executeEvent } from '../../utils/events';
 import { useAtom } from 'jotai';
-import { memberGroupsAtom, txListAtom } from '../../atoms/global';
+import { memberGroupsAtom, txListAtom, userInfoAtom } from '../../atoms/global';
 import { useTranslation } from 'react-i18next';
 import { TIME_MINUTES_1_IN_MILLISECONDS } from '../../constants/constants';
-import { titleBarIconButtonProps } from '../Desktop/CustomTitleBar';
+import {
+  applyReticulumJoinUnreadBaseline,
+  resolveReticulumMembershipJoinedAt,
+} from '../Chat/reticulumJoinUnreadBaseline';
 
-export const TaskManager = ({ getUserInfo }) => {
-  const [memberGroups] = useAtom(memberGroupsAtom);
+export const TaskManager = ({
+  getUserInfo,
+  buttonSx = undefined,
+  iconSx = undefined,
+  tooltipSlotProps,
+  tooltipTitle,
+}: {
+  getUserInfo: (useTimer?: boolean) => Promise<void>;
+  buttonSx?: any;
+  iconSx?: any;
+  tooltipSlotProps?: TooltipProps['slotProps'];
+  tooltipTitle?: ReactNode;
+}) => {
+  const [memberGroups, setMemberGroups] = useAtom(memberGroupsAtom);
   const [txList, setTxList] = useAtom(txListAtom);
-  const [open, setOpen] = useState(false);
-  const intervals = useRef({});
+  const [userInfo] = useAtom(userInfoAtom);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const intervals = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+  const membershipIntervals = useRef<
+    Record<string, ReturnType<typeof setInterval>>
+  >({});
   const theme = useTheme();
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
 
-  const handleClick = () => {
-    setOpen((prev) => !prev);
+  const popoverOpen = Boolean(anchorEl);
+
+  const handleIconClick = (event: MouseEvent<HTMLElement>) => {
+    setAnchorEl((prev) =>
+      prev === event.currentTarget ? null : event.currentTarget
+    );
   };
 
-  const getStatus = ({ signature }, callback) => {
+  const handleClosePopover = () => {
+    setAnchorEl(null);
+  };
+
+  const getStatus = (
+    { signature }: { signature: string },
+    callback?: (ok: boolean) => void
+  ) => {
     let stop = false;
     const getAnswer = async () => {
       const getTx = async () => {
@@ -58,7 +91,7 @@ export const TaskManager = ({ getUserInfo }) => {
               }, TIME_MINUTES_1_IN_MILLISECONDS)
             );
             setTxList((prev) => {
-              let previousData = [...prev];
+              const previousData = [...prev];
               const findTxWithSignature = previousData.findIndex(
                 (tx) => tx.signature === signature
               );
@@ -88,7 +121,7 @@ export const TaskManager = ({ getUserInfo }) => {
 
   useEffect(() => {
     setTxList((prev) => {
-      let previousData = [...prev];
+      const previousData = [...prev];
       memberGroups.forEach((group) => {
         const findGroup = txList.findIndex(
           (tx) => tx?.type === 'joined-group' && tx?.groupId === group.groupId
@@ -121,6 +154,111 @@ export const TaskManager = ({ getUserInfo }) => {
       return previousData;
     });
   }, [memberGroups, getUserInfo]);
+
+  useEffect(() => {
+    const pendingJoins = txList.filter(
+      (tx) =>
+        tx?.type === 'joined-group' &&
+        tx?.done !== true &&
+        Number.isInteger(Number(tx?.groupId)) &&
+        Number(tx.groupId) > 0
+    );
+    for (const tx of pendingJoins) {
+      const groupId = Number(tx.groupId);
+      const address = String(
+        tx?.memberAddress || tx?.creatorAddress || userInfo?.address || ''
+      ).trim();
+      if (!address) continue;
+      const intervalKey = `${tx?.signature || groupId}:${address}`;
+      if (membershipIntervals.current[intervalKey]) continue;
+      let requestInFlight = false;
+      const reconcileMembership = async () => {
+        if (requestInFlight) return;
+        requestInFlight = true;
+        try {
+          const response = await fetch(
+            `${getBaseApiReact()}/groups/member/${encodeURIComponent(address)}`
+          );
+          if (!response.ok) return;
+          const value = await response.json();
+          const groups = Array.isArray(value)
+            ? value
+            : Array.isArray(value?.groups)
+              ? value.groups
+              : [];
+          const confirmedGroup = groups.find(
+            (group: any) => Number(group?.groupId) === groupId
+          );
+          if (!confirmedGroup) return;
+          const joinedAt = await resolveReticulumMembershipJoinedAt(
+            groupId,
+            address
+          ).catch(() => null);
+          const confirmedMembership = joinedAt
+            ? { ...confirmedGroup, reticulumJoinedAt: joinedAt }
+            : confirmedGroup;
+
+          setMemberGroups((current: any[]) => {
+            const existingIndex = current.findIndex(
+              (group: any) => Number(group?.groupId) === groupId
+            );
+            if (existingIndex === -1) return [confirmedMembership, ...current];
+            const next = [...current];
+            next[existingIndex] = {
+              ...next[existingIndex],
+              ...confirmedMembership,
+            };
+            return next;
+          });
+          setTxList((current) =>
+            current.map((candidate) =>
+              candidate === tx ||
+              (candidate?.type === 'joined-group' &&
+                Number(candidate?.groupId) === groupId &&
+                candidate?.done !== true)
+                ? { ...candidate, done: true }
+                : candidate
+            )
+          );
+          window.clearInterval(membershipIntervals.current[intervalKey]);
+          delete membershipIntervals.current[intervalKey];
+
+          if (joinedAt) {
+            for (const delay of [0, 1_500, 4_000, 10_000]) {
+              window.setTimeout(() => {
+                void applyReticulumJoinUnreadBaseline({
+                  address,
+                  groupId,
+                  joinedAt,
+                });
+              }, delay);
+            }
+          }
+        } catch {
+          // The transaction or node membership index may still be pending.
+        } finally {
+          requestInFlight = false;
+        }
+      };
+      membershipIntervals.current[intervalKey] = window.setInterval(
+        () => void reconcileMembership(),
+        3_000
+      );
+      void reconcileMembership();
+    }
+  }, [setMemberGroups, setTxList, txList, userInfo?.address]);
+
+  useEffect(
+    () => () => {
+      for (const timer of Object.values(intervals.current)) {
+        clearInterval(timer);
+      }
+      for (const timer of Object.values(membershipIntervals.current)) {
+        clearInterval(timer);
+      }
+    },
+    []
+  );
 
   const checkForName = useCallback(async (address) => {
     if (!address) return;
@@ -196,86 +334,160 @@ export const TaskManager = ({ getUserInfo }) => {
 
   if (txList?.length === 0 || txList.every((item) => item?.done)) return null;
 
+  const triggerButton = (
+    <IconButton
+      disableFocusRipple
+      disableRipple
+      aria-expanded={popoverOpen ? 'true' : 'false'}
+      aria-haspopup="true"
+      tabIndex={-1}
+      onClick={handleIconClick}
+      size="small"
+      sx={{
+        color: txList.some((item) => !item.done)
+          ? theme.palette.primary.light
+          : theme.palette.text.secondary,
+        '&.MuiIconButton-root': {
+          width: 26,
+          height: 26,
+        },
+        ...(buttonSx || {}),
+      }}
+    >
+      {txList.some((item) => !item.done) ? (
+        <PendingIcon sx={iconSx || undefined} />
+      ) : (
+        <TaskAltIcon sx={iconSx || undefined} />
+      )}
+    </IconButton>
+  );
+
   return (
     <>
-      {!open && (
-        <IconButton
-          disableFocusRipple
-          disableRipple
-          tabIndex={-1}
-          onClick={handleClick}
-          size="small"
-          sx={{
-            bgcolor: theme.palette.primary.main,
-            color: theme.palette.text.primary,
-            ':hover': { bgcolor: theme.palette.primary },
-            '&.MuiIconButton-root': {
-              width: 26,
-              height: 26,
-            },
-          }}
+      {tooltipTitle != null ? (
+        <Tooltip
+          arrow
+          disableInteractive
+          placement="bottom"
+          slotProps={tooltipSlotProps}
+          title={tooltipTitle}
         >
-          {txList.some((item) => !item.done) ? (
-            <PendingIcon />
-          ) : (
-            <TaskAltIcon />
-          )}
-        </IconButton>
+          {triggerButton}
+        </Tooltip>
+      ) : (
+        triggerButton
       )}
-      {open && (
-        <List
-          sx={{
-            bgcolor: theme.palette.background.paper,
-            bottom: 16,
-            boxShadow: 4,
-            maxHeight: '400px',
-            overflow: 'auto',
-            padding: '0px',
-            position: 'fixed',
-            right: 16,
-            width: '300px',
-            zIndex: 10,
-          }}
-          component="nav"
-        >
-          <ListItemButton onClick={handleClick}>
-            <ListItemIcon>
-              {txList.some((item) => !item.done) ? (
-                <PendingIcon
-                  sx={{
-                    color: theme.palette.primary,
-                  }}
-                />
-              ) : (
-                <TaskAltIcon
-                  sx={{
-                    color: theme.palette.primary,
-                  }}
-                />
-              )}
-            </ListItemIcon>
 
-            <ListItemText
-              primary={t('core:message.generic.ongoing_transactions', {
+      <Popover
+        anchorEl={anchorEl}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        disableRestoreFocus
+        open={popoverOpen}
+        slotProps={{
+          paper: {
+            elevation: 8,
+            sx: {
+              border: `1px solid ${theme.palette.divider}`,
+              borderRadius: 2,
+              display: 'flex',
+              flexDirection: 'column',
+              maxHeight: 'min(400px, 70vh)',
+              maxWidth: 'min(300px, calc(100vw - 16px))',
+              mt: 0.75,
+              overflow: 'hidden',
+              width: '300px',
+            },
+          },
+        }}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        onClose={handleClosePopover}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            maxHeight: 'min(400px, 70vh)',
+            overflow: 'hidden',
+          }}
+        >
+          <Box
+            sx={{
+              alignItems: 'center',
+              borderBottom: `1px solid ${theme.palette.divider}`,
+              display: 'flex',
+              flexShrink: 0,
+              gap: 1,
+              pl: 1.5,
+              pr: 0.5,
+              py: 1,
+            }}
+          >
+            <Box
+              sx={{
+                alignItems: 'center',
+                color: theme.palette.primary.main,
+                display: 'flex',
+                flexShrink: 0,
+              }}
+            >
+              {txList.some((item) => !item.done) ? (
+                <PendingIcon fontSize="small" />
+              ) : (
+                <TaskAltIcon fontSize="small" />
+              )}
+            </Box>
+            <Typography
+              fontWeight={600}
+              sx={{ flex: 1, minWidth: 0, pr: 0.5 }}
+              variant="subtitle2"
+            >
+              {t('core:message.generic.ongoing_transactions', {
                 postProcess: 'capitalizeFirstChar',
               })}
-            />
-            {open ? <ExpandLess /> : <ExpandMore />}
-          </ListItemButton>
+            </Typography>
+            <IconButton
+              aria-label={t('core:action.close', {
+                postProcess: 'capitalizeFirstChar',
+              })}
+              edge="end"
+              size="small"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleClosePopover();
+              }}
+            >
+              <CloseRoundedIcon fontSize="small" />
+            </IconButton>
+          </Box>
 
-          <Collapse in={open} timeout="auto" unmountOnExit>
-            <List component="div" disablePadding>
-              {txList.map((item) => (
-                <ListItemButton key={item?.signature} sx={{ pl: 4 }}>
-                  <ListItemText
-                    primary={item?.done ? item.labelDone : item.label}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          </Collapse>
-        </List>
-      )}
+          <List
+            component="nav"
+            dense
+            sx={{
+              bgcolor: theme.palette.background.paper,
+              flex: 1,
+              minHeight: 0,
+              overflow: 'auto',
+              py: 0,
+            }}
+          >
+            {txList.map((item) => (
+              <ListItemButton
+                key={item?.signature ?? `${item?.type}-${item?.groupId}`}
+                sx={{ alignItems: 'flex-start', py: 1, pl: 2, pr: 2 }}
+              >
+                <ListItemText
+                  primary={item?.done ? item.labelDone : item.label}
+                  primaryTypographyProps={{
+                    variant: 'body2',
+                    sx: { whiteSpace: 'normal', wordBreak: 'break-word' },
+                  }}
+                />
+              </ListItemButton>
+            ))}
+          </List>
+        </Box>
+      </Popover>
     </>
   );
 };

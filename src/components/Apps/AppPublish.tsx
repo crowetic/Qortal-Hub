@@ -99,13 +99,7 @@ export const AppPublish = ({
   const [file, setFile] = useState(null);
   const { show } = useContext(QORTAL_APP_CONTEXT);
   const theme = useTheme();
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
   const [tag1, setTag1] = useState('');
   const [tag2, setTag2] = useState('');
   const [tag3, setTag3] = useState('');
@@ -165,11 +159,20 @@ export const AppPublish = ({
           (myApp?.metadata?.description || '').slice(0, DESCRIPTION_MAX_CHARS)
         );
         setCategory(myApp?.metadata?.category || '');
-        setTag1((myApp?.metadata?.tags[0] || '').slice(0, TAG_MAX_CHARS));
-        setTag2((myApp?.metadata?.tags[1] || '').slice(0, TAG_MAX_CHARS));
-        setTag3((myApp?.metadata?.tags[2] || '').slice(0, TAG_MAX_CHARS));
-        setTag4((myApp?.metadata?.tags[3] || '').slice(0, TAG_MAX_CHARS));
-        setTag5((myApp?.metadata?.tags[4] || '').slice(0, TAG_MAX_CHARS));
+        const rawTags = myApp?.metadata?.tags;
+        const tags: string[] = Array.isArray(rawTags)
+          ? rawTags
+          : typeof rawTags === 'string'
+            ? rawTags
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : [];
+        setTag1((tags[0] || '').slice(0, TAG_MAX_CHARS));
+        setTag2((tags[1] || '').slice(0, TAG_MAX_CHARS));
+        setTag3((tags[2] || '').slice(0, TAG_MAX_CHARS));
+        setTag4((tags[3] || '').slice(0, TAG_MAX_CHARS));
+        setTag5((tags[4] || '').slice(0, TAG_MAX_CHARS));
       }
     } catch (error) {
       console.log(error);

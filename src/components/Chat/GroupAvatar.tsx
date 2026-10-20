@@ -10,6 +10,9 @@ import {
   Box,
   Button,
   ButtonBase,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   Popover,
   Typography,
   useTheme,
@@ -31,18 +34,15 @@ export const GroupAvatar = ({
   setOpenSnack,
   setInfoSnack,
   groupId,
+  dialogOpen = false,
+  externalOnly = false,
+  onDialogClose,
 }) => {
   const [hasAvatar, setHasAvatar] = useState(false);
   const [avatarFile, setAvatarFile] = useState(null);
   const [tempAvatar, setTempAvatar] = useState(null);
   const { show } = useContext(QORTAL_APP_CONTEXT);
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -57,10 +57,11 @@ export const GroupAvatar = ({
   // Handle closing the Popover
   const handleClose = () => {
     setAnchorEl(null);
+    onDialogClose?.();
   };
 
   // Determine if the popover is open
-  const open = Boolean(anchorEl);
+  const open = Boolean(anchorEl) || dialogOpen;
   const id = open ? 'avatar-img' : undefined;
 
   const checkIfAvatarExists = useCallback(async (name, groupId) => {
@@ -177,6 +178,26 @@ export const GroupAvatar = ({
     }
   };
 
+  if (externalOnly) {
+    return (
+      <>
+        <PopoverComp
+          myName={myName}
+          avatarFile={avatarFile}
+          setAvatarFile={setAvatarFile}
+          id={id}
+          open={open}
+          anchorEl={anchorEl}
+          handleClose={handleClose}
+          publishAvatar={publishAvatar}
+          isLoading={isLoading}
+          dialogOpen={dialogOpen}
+        />
+        {avatarPreviewModal}
+      </>
+    );
+  }
+
   if (tempAvatar) {
     return (
       <>
@@ -220,6 +241,7 @@ export const GroupAvatar = ({
           handleClose={handleClose}
           publishAvatar={publishAvatar}
           isLoading={isLoading}
+          dialogOpen={false}
         />
         {avatarPreviewModal}
       </>
@@ -269,6 +291,7 @@ export const GroupAvatar = ({
           handleClose={handleClose}
           publishAvatar={publishAvatar}
           isLoading={isLoading}
+          dialogOpen={false}
         />
         {avatarPreviewModal}
       </>
@@ -299,6 +322,7 @@ export const GroupAvatar = ({
         handleClose={handleClose}
         publishAvatar={publishAvatar}
         isLoading={isLoading}
+        dialogOpen={false}
       />
       {avatarPreviewModal}
     </>
@@ -316,95 +340,26 @@ const PopoverComp = ({
   publishAvatar,
   isLoading,
   myName,
+  dialogOpen,
 }) => {
   const theme = useTheme();
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
 
-  return (
-    <Popover
-      id={id}
-      open={open}
-      anchorEl={anchorEl}
-      onClose={handleClose} // Close popover on click outside
-      anchorOrigin={{
-        vertical: 'bottom',
-        horizontal: 'center',
-      }}
-      transformOrigin={{
-        vertical: 'top',
-        horizontal: 'center',
-      }}
-    >
-      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Typography
-          sx={{
-            fontSize: '12px',
-          }}
-        >
-          {t('core:message.generic.avatar_size', {
-            size: MAX_SIZE_AVATAR,
-            postProcess: 'capitalizeFirstChar',
-          })}
-        </Typography>
+  const content = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 2 }}>
+      <Typography
+        sx={{
+          fontSize: '12px',
+        }}
+      >
+        {t('core:message.generic.avatar_size', {
+          size: MAX_SIZE_AVATAR,
+          postProcess: 'capitalizeFirstChar',
+        })}
+      </Typography>
 
-        <ImageUploader onPick={(file) => setAvatarFile(file)}>
-          <Button
-            variant="contained"
-            sx={{
-              backgroundColor: theme.palette.other.positive,
-              color: theme.palette.text.primary,
-              fontWeight: 'bold',
-              opacity: 0.7,
-              '&:hover': {
-                backgroundColor: theme.palette.other.positive,
-                color: 'black',
-                opacity: 1,
-              },
-            }}
-          >
-            {t('core:action.choose_image', {
-              postProcess: 'capitalizeFirstChar',
-            })}
-          </Button>
-        </ImageUploader>
-
-        {avatarFile?.name}
-
-        <Spacer height="25px" />
-
-        {!myName && (
-          <Box
-            sx={{
-              alignItems: 'center',
-              display: 'flex',
-              gap: '5px',
-            }}
-          >
-            <ErrorIcon
-              sx={{
-                color: theme.palette.text.primary,
-              }}
-            />
-            <Typography>
-              {t('group:message.generic.avatar_registered_name', {
-                postProcess: 'capitalizeFirstChar',
-              })}
-            </Typography>
-          </Box>
-        )}
-
-        <Spacer height="25px" />
-
-        <LoadingButton
-          loading={isLoading}
-          disabled={!avatarFile || !myName}
-          onClick={publishAvatar}
+      <ImageUploader onPick={(file) => setAvatarFile(file)}>
+        <Button
           variant="contained"
           sx={{
             backgroundColor: theme.palette.other.positive,
@@ -418,11 +373,101 @@ const PopoverComp = ({
             },
           }}
         >
-          {t('group:action.publish_avatar', {
+          {t('core:action.choose_image', {
             postProcess: 'capitalizeFirstChar',
           })}
-        </LoadingButton>
-      </Box>
+        </Button>
+      </ImageUploader>
+
+      {avatarFile?.name}
+
+      <Spacer height="25px" />
+
+      {!myName && (
+        <Box
+          sx={{
+            alignItems: 'center',
+            display: 'flex',
+            gap: '5px',
+          }}
+        >
+          <ErrorIcon
+            sx={{
+              color: theme.palette.text.primary,
+            }}
+          />
+          <Typography>
+            {t('group:message.generic.avatar_registered_name', {
+              postProcess: 'capitalizeFirstChar',
+            })}
+          </Typography>
+        </Box>
+      )}
+
+      <Spacer height="25px" />
+
+      <LoadingButton
+        loading={isLoading}
+        disabled={!avatarFile || !myName}
+        onClick={publishAvatar}
+        variant="contained"
+        sx={{
+          backgroundColor: theme.palette.other.positive,
+          color: theme.palette.text.primary,
+          fontWeight: 'bold',
+          opacity: 0.7,
+          '&:hover': {
+            backgroundColor: theme.palette.other.positive,
+            color: 'black',
+            opacity: 1,
+          },
+        }}
+      >
+        {t('group:action.publish_avatar', {
+          postProcess: 'capitalizeFirstChar',
+        })}
+      </LoadingButton>
+    </Box>
+  );
+
+  if (dialogOpen) {
+    return (
+      <Dialog
+        open={open}
+        onClose={handleClose}
+        PaperProps={{
+          sx: {
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: '8px',
+            maxWidth: 420,
+            width: 'calc(100vw - 32px)',
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontSize: 19, fontWeight: 800, pb: 0.5 }}>
+          Change Group Avatar
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>{content}</DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Popover
+      id={id}
+      open={open}
+      anchorEl={anchorEl}
+      onClose={handleClose}
+      anchorOrigin={{
+        vertical: 'bottom',
+        horizontal: 'center',
+      }}
+      transformOrigin={{
+        vertical: 'top',
+        horizontal: 'center',
+      }}
+    >
+      {content}
     </Popover>
   );
 };

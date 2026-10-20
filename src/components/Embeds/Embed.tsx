@@ -18,8 +18,18 @@ import { AttachmentCard } from './AttachmentEmbed';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
 
+const encodeQdnPathSegment = (value) => {
+  const rawValue = String(value ?? '');
+
+  try {
+    return encodeURIComponent(decodeURIComponent(rawValue));
+  } catch {
+    return encodeURIComponent(rawValue);
+  }
+};
+
 const getPoll = async (name) => {
-  const pollName = name;
+  const pollName = encodeQdnPathSegment(name);
   const url = `${getBaseApiReact()}/polls/${pollName}`;
 
   const response = await fetch(url, {
@@ -52,6 +62,7 @@ const getPoll = async (name) => {
 };
 
 export const Embed = ({ embedLink }) => {
+  const safeEmbedLink = typeof embedLink === 'string' ? embedLink : '';
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [poll, setPoll] = useState(null);
@@ -64,15 +75,10 @@ export const Embed = ({ embedLink }) => {
   const [parsedData, setParsedData] = useState(null);
   const setBlobs = useSetAtom(blobControllerAtom);
   const [selectedGroupId] = useAtom(selectedGroupIdAtom);
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
   const resourceData = useMemo(() => {
-    const parsedDataOnTheFly = parseQortalLink(embedLink);
+    if (!safeEmbedLink) return null;
+    const parsedDataOnTheFly = parseQortalLink(safeEmbedLink);
     if (
       parsedDataOnTheFly?.service &&
       parsedDataOnTheFly?.name &&
@@ -95,7 +101,7 @@ export const Embed = ({ embedLink }) => {
     } else {
       return null;
     }
-  }, [embedLink]);
+  }, [safeEmbedLink]);
 
   const keyIdentifier = useMemo(() => {
     if (resourceData) {
@@ -147,8 +153,11 @@ export const Embed = ({ embedLink }) => {
       let hasTriggeredDownload = false;
 
       const tryToGetImageStatus = async () => {
+        const encodedService = encodeQdnPathSegment(service);
+        const encodedName = encodeQdnPathSegment(name);
+        const encodedIdentifier = encodeQdnPathSegment(identifier);
         // First, check status WITHOUT build parameter
-        const urlStatus = `${getBaseApiReact()}/arbitrary/resource/status/${service}/${name}/${identifier}`;
+        const urlStatus = `${getBaseApiReact()}/arbitrary/resource/status/${encodedService}/${encodedName}/${encodedIdentifier}`;
 
         const responseStatus = await fetch(urlStatus, {
           method: 'GET',
@@ -162,7 +171,7 @@ export const Embed = ({ embedLink }) => {
         // If not ready and haven't triggered download yet, trigger it ONCE with async=true
         if (responseData?.status !== 'READY' && !hasTriggeredDownload) {
           hasTriggeredDownload = true;
-          const urlAsync = `${getBaseApiReact()}/arbitrary/${service}/${name}/${identifier}?async=true`;
+          const urlAsync = `${getBaseApiReact()}/arbitrary/${encodedService}/${encodedName}/${encodedIdentifier}?async=true`;
 
           // Trigger download but don't wait for response
           fetch(urlAsync, {
@@ -180,7 +189,7 @@ export const Embed = ({ embedLink }) => {
           responseData?.status === 'DOWNLOADED'
         ) {
           if (parsedData?.encryptionType) {
-            const urlData = `${getBaseApiReact()}/arbitrary/${service}/${name}/${identifier}?encoding=base64`;
+            const urlData = `${getBaseApiReact()}/arbitrary/${encodedService}/${encodedName}/${encodedIdentifier}?encoding=base64`;
 
             const responseData = await fetch(urlData, {
               method: 'GET',
@@ -249,7 +258,7 @@ export const Embed = ({ embedLink }) => {
               );
             }
           } else {
-            imageFinalUrl = `${getBaseApiReact()}/arbitrary/${service}/${name}/${identifier}`;
+            imageFinalUrl = `${getBaseApiReact()}/arbitrary/${encodedService}/${encodedName}/${encodedIdentifier}`;
           }
         }
       };
@@ -325,8 +334,9 @@ export const Embed = ({ embedLink }) => {
   };
 
   const handleLink = () => {
+    if (!safeEmbedLink) return;
     try {
-      const parsedData = parseQortalLink(embedLink);
+      const parsedData = parseQortalLink(safeEmbedLink);
       setParsedData(parsedData);
       const type = parsedData?.type;
       try {
@@ -369,8 +379,9 @@ export const Embed = ({ embedLink }) => {
   };
 
   const fetchImage = (forceRefresh = false) => {
+    if (!safeEmbedLink) return;
     try {
-      const parsedData = parseQortalLink(embedLink);
+      const parsedData = parseQortalLink(safeEmbedLink);
       handleImage(parsedData, forceRefresh);
     } catch (error) {
       setErrorMsg(
@@ -399,10 +410,10 @@ export const Embed = ({ embedLink }) => {
   };
 
   useEffect(() => {
-    if (!embedLink || hasFetched.current) return;
+    if (!safeEmbedLink || hasFetched.current) return;
     handleLink();
     hasFetched.current = true;
-  }, [embedLink]);
+  }, [safeEmbedLink]);
 
   const resourceDetails = useAtomValue(resourceKeySelector(keyIdentifier));
 
@@ -410,7 +421,8 @@ export const Embed = ({ embedLink }) => {
     let parsedType;
     let encryptionType = false;
     try {
-      const parsedDataOnTheFly = parseQortalLink(embedLink);
+      if (!safeEmbedLink) return { parsedType, encryptionType };
+      const parsedDataOnTheFly = parseQortalLink(safeEmbedLink);
       if (parsedDataOnTheFly?.type) {
         parsedType = parsedDataOnTheFly.type;
       }
@@ -421,7 +433,7 @@ export const Embed = ({ embedLink }) => {
       console.log(error);
     }
     return { parsedType, encryptionType };
-  }, [embedLink]);
+  }, [safeEmbedLink]);
 
   return (
     <div>

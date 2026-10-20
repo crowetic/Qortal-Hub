@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import { AppViewer } from './AppViewer';
-import Frame from 'react-frame-component';
-import { appHeighOffsetPx } from '../Desktop/CustomTitleBar';
+import { Box } from '@mui/material';
+import { appChromeOffsetPx } from '../Desktop/CustomTitleBar';
 
 type AppViewerContainerProps = {
   app: any;
@@ -9,56 +9,37 @@ type AppViewerContainerProps = {
   hide: boolean;
   isDevMode: boolean;
   customHeight?: string;
-  skipAuth?: boolean;
 };
 
 const AppViewerContainer = forwardRef<
   HTMLIFrameElement,
   AppViewerContainerProps
->(({ app, isSelected, hide, isDevMode, customHeight, skipAuth }, ref) => {
+>(({ app, isSelected, hide, isDevMode, customHeight }, ref) => {
+  const isHidden = !isSelected || hide;
+  const style = {
+    border: 'none',
+    contain: 'layout paint style',
+    display: 'block',
+    height: customHeight || `calc(100vh - ${appChromeOffsetPx})`,
+    isolation: 'isolate',
+    left: isHidden ? '-200vw' : '0',
+    minHeight: 0,
+    overflow: 'hidden',
+    overflowAnchor: 'none',
+    overscrollBehavior: 'none',
+    position: isHidden ? 'absolute' : 'relative',
+    top: 0,
+    width: '100%',
+  } as const;
+
   return (
-    <Frame
-      id={`browser-iframe-${app?.tabId}`}
-      head={
-        <>
-          <style>
-            {`
-              body {
-                margin: 0;
-                padding: 0;
-              }
-              * {
-                msOverflowStyle: 'none', /* IE and Edge */
-                scrollbar-width: none;  /* Firefox */
-              }
-              *::-webkit-scrollbar {
-                display: none;  /* Chrome, Safari, Opera */
-              }
-              .frame-content {
-                overflow: hidden;
-                height: 100vh;
-              }
-            `}
-          </style>
-        </>
-      }
-      style={{
-        border: 'none',
-        height: customHeight || `calc(100vh - ${appHeighOffsetPx})`,
-        left: (!isSelected || hide) && '-200vw',
-        overflow: 'hidden',
-        position: (!isSelected || hide) && 'fixed',
-        width: '100%',
-      }}
-    >
+    <Box sx={style}>
       <AppViewer
         app={app}
-        hide={!isSelected || hide}
         isDevMode={isDevMode}
         ref={ref}
-        skipAuth={skipAuth}
       />
-    </Frame>
+    </Box>
   );
 });
 

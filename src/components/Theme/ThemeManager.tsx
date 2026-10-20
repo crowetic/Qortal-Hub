@@ -22,7 +22,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
-import { useThemeContext } from './ThemeContext';
+import { ENABLE_CUSTOM_THEMES, useThemeContext } from './ThemeContext';
 import { darkThemeOptions } from '../../styles/theme-dark';
 import { lightThemeOptions } from '../../styles/theme-light';
 import ShortUniqueId from 'short-unique-id';
@@ -84,19 +84,26 @@ export default function ThemeManager() {
   });
   const [currentTab, setCurrentTab] = useState('light');
   const nameInputRef = useRef(null);
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
 
   useEffect(() => {
     if (openEditor && nameInputRef.current) {
       nameInputRef.current.focus();
     }
   }, [openEditor]);
+
+  if (!ENABLE_CUSTOM_THEMES) {
+    return (
+      <Box p={2}>
+        <Typography variant="h5" gutterBottom>
+          {t('core:theme.manager', { postProcess: 'capitalizeFirstChar' })}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Custom themes are currently disabled.
+        </Typography>
+      </Box>
+    );
+  }
 
   const handleAddTheme = () => {
     setThemeDraft({
@@ -221,7 +228,7 @@ export default function ThemeManager() {
       const importedTheme = JSON.parse(fileContent);
       if (!validateTheme(importedTheme)) {
         throw new Error(
-          t('core:message.generic.invalid_theme_format', {
+          t('core:message.error.invalid_theme_format', {
             postProcess: 'capitalizeFirstChar',
           })
         );

@@ -47,6 +47,10 @@ import { useAtom, useSetAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
 import { Label } from '../../styles/App-styles.ts';
 import {
+  GROUP_ACTIVITY_BLUE,
+  getBlueTier1ButtonSx,
+} from './groupActivityColorSystem';
+import {
   TIME_WEEKS_1_IN_MILLISECONDS,
   TIME_MINUTES_30_IN_MILLISECONDS,
 } from '../../constants/constants.ts';
@@ -74,9 +78,11 @@ export function getGroupId(str) {
 
 export const ListOfGroupPromotions = ({
   compact = false,
+  compactViewportHeight,
   onCountChange,
 }: {
   compact?: boolean;
+  compactViewportHeight?: number;
   onCountChange?: (count: number) => void;
 } = {}) => {
   const [popoverAnchor, setPopoverAnchor] = useState(null);
@@ -102,13 +108,22 @@ export const ListOfGroupPromotions = ({
   const { show } = useContext(QORTAL_APP_CONTEXT);
   const setTxList = useSetAtom(txListAtom);
   const theme = useTheme();
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const compactViewportHeightCss =
+    compactViewportHeight != null ? `${compactViewportHeight}px` : undefined;
+  const hasFixedCompactViewport = compact && compactViewportHeightCss != null;
+  const groupActivityAccentTextColor = theme.palette.getContrastText(
+    GROUP_ACTIVITY_BLUE.primary
+  );
+  const promotionButtonSx = {
+    borderRadius: '50px',
+    color: groupActivityAccentTextColor,
+    fontWeight: 600,
+    px: 2,
+    py: 1,
+    textTransform: 'none',
+    ...getBlueTier1ButtonSx(),
+  } as const;
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
   const listRef = useRef(null);
   const rowVirtualizer = useVirtualizer({
     count: promotions.length,
@@ -411,12 +426,16 @@ export const ListOfGroupPromotions = ({
   const promotionsList = (
     <Box
       sx={{
-        bgcolor: 'background.paper',
+        bgcolor: compact ? 'transparent' : 'background.paper',
         borderRadius: compact ? 0 : '16px',
         display: 'flex',
         flexDirection: 'column',
+        flex: hasFixedCompactViewport ? 1 : undefined,
+        height: hasFixedCompactViewport ? '100%' : undefined,
         maxHeight: compact ? undefined : '700px',
         maxWidth: compact ? '100%' : '90%',
+        minHeight: hasFixedCompactViewport ? 0 : undefined,
+        overflow: hasFixedCompactViewport ? 'hidden' : undefined,
         padding: compact ? '16px 0' : '24px 0',
         width: compact ? '100%' : '750px',
         border: compact
@@ -463,7 +482,7 @@ export const ListOfGroupPromotions = ({
 
       <div
         style={{
-          height: '600px',
+          height: hasFixedCompactViewport ? '100%' : '600px',
           position: 'relative',
           display: 'flex',
           flexDirection: 'column',
@@ -697,9 +716,15 @@ export const ListOfGroupPromotions = ({
                                   loadingPosition="start"
                                   variant="contained"
                                   onClick={() =>
-                                    handleJoinGroup(promotion, promotion?.isOpen)
+                                    handleJoinGroup(
+                                      promotion,
+                                      promotion?.isOpen
+                                    )
                                   }
-                                  sx={{ textTransform: 'none', fontWeight: 600 }}
+                                  sx={{
+                                    textTransform: 'none',
+                                    fontWeight: 600,
+                                  }}
                                 >
                                   {t('core:action.join', {
                                     postProcess: 'capitalizeFirstChar',
@@ -782,34 +807,34 @@ export const ListOfGroupPromotions = ({
                               flexShrink: 0,
                             }}
                           >
-<Box
-                            sx={{
-                              px: 1,
-                              py: 0.35,
-                              borderRadius: '6px',
-                              bgcolor: promotion?.isOpen
-                                ? `${theme.palette.other.danger}18`
-                                : `${theme.palette.other.positive}18`,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 0.4,
-                            }}
-                          >
-                            {promotion?.isOpen === true ? (
-                              <NoEncryptionGmailerrorredIcon
-                                sx={{
-                                  fontSize: 14,
-                                  color: theme.palette.other.danger,
-                                }}
-                              />
-                            ) : (
-                              <LockIcon
-                                sx={{
-                                  fontSize: 14,
-                                  color: theme.palette.other.positive,
-                                }}
-                              />
-                            )}
+                            <Box
+                              sx={{
+                                px: 1,
+                                py: 0.35,
+                                borderRadius: '6px',
+                                bgcolor: promotion?.isOpen
+                                  ? `${theme.palette.other.danger}18`
+                                  : `${theme.palette.other.positive}18`,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 0.4,
+                              }}
+                            >
+                              {promotion?.isOpen === true ? (
+                                <NoEncryptionGmailerrorredIcon
+                                  sx={{
+                                    fontSize: 14,
+                                    color: theme.palette.other.danger,
+                                  }}
+                                />
+                              ) : (
+                                <LockIcon
+                                  sx={{
+                                    fontSize: 14,
+                                    color: theme.palette.other.positive,
+                                  }}
+                                />
+                              )}
                               <Typography
                                 variant="caption"
                                 fontWeight={600}
@@ -902,8 +927,12 @@ export const ListOfGroupPromotions = ({
         alignItems: compact ? 'stretch' : 'center',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'center',
+        height: hasFixedCompactViewport ? compactViewportHeightCss : undefined,
+        justifyContent: compact ? 'flex-start' : 'center',
         marginTop: compact ? '0' : '20px',
+        minHeight: hasFixedCompactViewport
+          ? compactViewportHeightCss
+          : undefined,
         width: '100%',
       }}
     >
@@ -963,15 +992,7 @@ export const ListOfGroupPromotions = ({
           <Button
             variant="contained"
             onClick={() => setIsShowModal(true)}
-            sx={{
-              textTransform: 'none',
-              fontWeight: 600,
-              borderRadius: '10px',
-              px: 2,
-              py: 1,
-              boxShadow: 'none',
-              '&:hover': { boxShadow: '0 2px 12px rgba(0,0,0,0.2)' },
-            }}
+            sx={promotionButtonSx}
           >
             {t('group:action.add_promotion', {
               postProcess: 'capitalizeFirstChar',
@@ -1006,15 +1027,7 @@ export const ListOfGroupPromotions = ({
                 <Button
                   variant="contained"
                   onClick={() => setIsShowModal(true)}
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    borderRadius: '10px',
-                    px: 2,
-                    py: 1,
-                    boxShadow: 'none',
-                    '&:hover': { boxShadow: '0 2px 12px rgba(0,0,0,0.2)' },
-                  }}
+                  sx={promotionButtonSx}
                 >
                   {t('group:action.add_promotion', {
                     postProcess: 'capitalizeFirstChar',

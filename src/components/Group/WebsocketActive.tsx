@@ -6,25 +6,34 @@ import {
 } from '../../App';
 import { subscribeToEvent, unsubscribeFromEvent } from '../../utils/events';
 import { useAtomValue } from 'jotai';
-import { extStateAtom } from '../../atoms/global';
+import { extStateAtom, selectedNodeInfoAtom } from '../../atoms/global';
 
 export const WebSocketActive = ({ myAddress, setIsLoadingGroups }) => {
   const extState = useAtomValue(extStateAtom);
+  const selectedNode = useAtomValue(selectedNodeInfoAtom);
   const extStateRef = useRef(extState);
   extStateRef.current = extState;
   const myAddressRef = useRef(myAddress);
   myAddressRef.current = myAddress;
 
   const socketRef = useRef(null); // WebSocket reference
+  const connectionIdRef = useRef(0);
   const timeoutIdRef = useRef(null); // Timeout ID reference
   const groupSocketTimeoutRef = useRef(null); // Group Socket Timeout reference
+  const reconnectTimeoutRef = useRef(null);
   const initiateRef = useRef(null);
   const forceCloseWebSocket = () => {
-    if (socketRef.current) {
-      clearTimeout(timeoutIdRef.current);
-      clearTimeout(groupSocketTimeoutRef.current);
-      socketRef.current.close(1000, 'forced');
-      socketRef.current = null;
+    connectionIdRef.current += 1;
+    clearTimeout(timeoutIdRef.current);
+    clearTimeout(groupSocketTimeoutRef.current);
+    clearTimeout(reconnectTimeoutRef.current);
+    timeoutIdRef.current = null;
+    groupSocketTimeoutRef.current = null;
+    reconnectTimeoutRef.current = null;
+    const socket = socketRef.current;
+    socketRef.current = null;
+    if (socket) {
+      socket.close(1000, 'forced');
     }
   };
 
@@ -43,14 +52,24 @@ export const WebSocketActive = ({ myAddress, setIsLoadingGroups }) => {
   useEffect(() => {
     if (!myAddress || extState === 'not-authenticated') return; // Only proceed when authenticated with address
 
-    const pingHeads = () => {
+    let effectActive = true;
+
+    const pingHeads = (
+      socket: WebSocket,
+      isCurrentConnection: (socket?: WebSocket | null) => boolean
+    ) => {
       try {
-        if (socketRef.current?.readyState === WebSocket.OPEN) {
-          socketRef.current.send('ping');
+        if (
+          isCurrentConnection(socket) &&
+          socket.readyState === WebSocket.OPEN
+        ) {
+          socket.send('ping');
           timeoutIdRef.current = setTimeout(() => {
-            if (socketRef.current) {
-              socketRef.current.close();
+            timeoutIdRef.current = null;
+            if (isCurrentConnection(socket)) {
+              socket.close();
               clearTimeout(groupSocketTimeoutRef.current);
+              groupSocketTimeoutRef.current = null;
             }
           }, 5000); // Close if no pong in 5 seconds
         }
@@ -61,6 +80,15 @@ export const WebSocketActive = ({ myAddress, setIsLoadingGroups }) => {
 
     const initWebsocketMessageGroup = async () => {
       forceCloseWebSocket(); // Ensure we close any existing connection
+      const connectionId = connectionIdRef.current;
+      const isCurrentConnection = (socket?: WebSocket | null) => {
+        if (!effectActive || connectionIdRef.current !== connectionId) {
+          return false;
+        }
+        if (socket && socketRef.current !== socket) return false;
+        return true;
+      };
+      if (!isCurrentConnection()) return;
       const currentAddress = myAddress;
       if (extStateRef.current === 'not-authenticated') return;
       if (currentAddress !== myAddressRef.current) return;
@@ -70,17 +98,30 @@ export const WebSocketActive = ({ myAddress, setIsLoadingGroups }) => {
           pauseAllQueues();
         }
         const socketLink = `${getBaseApiReactSocket()}/websockets/chat/active/${currentAddress}?encoding=BASE64&haschatreference=false`;
-        socketRef.current = new WebSocket(socketLink);
+        const socket = new WebSocket(socketLink);
+        socketRef.current = socket;
 
-        socketRef.current.onopen = () => {
-          setTimeout(pingHeads, 50); // Initial ping
+        socket.onopen = () => {
+          if (!isCurrentConnection(socket)) {
+            socket.close(1000, 'superseded');
+            return;
+          }
+          groupSocketTimeoutRef.current = setTimeout(
+            () => pingHeads(socket, isCurrentConnection),
+            50
+          ); // Initial ping
         };
 
-        socketRef.current.onmessage = (e) => {
+        socket.onmessage = (e) => {
+          if (!isCurrentConnection(socket)) return;
           try {
             if (e.data === 'pong') {
               clearTimeout(timeoutIdRef.current);
-              groupSocketTimeoutRef.current = setTimeout(pingHeads, 20000); // Ping every 20 seconds
+              timeoutIdRef.current = null;
+              groupSocketTimeoutRef.current = setTimeout(
+                () => pingHeads(socket, isCurrentConnection),
+                20000
+              ); // Ping every 20 seconds
             } else {
               if (!initiateRef.current) {
                 setIsLoadingGroups(false);
@@ -127,35 +168,46 @@ export const WebSocketActive = ({ myAddress, setIsLoadingGroups }) => {
           }
         };
 
-        socketRef.current.onclose = (event) => {
+        socket.onclose = (event) => {
+          if (!isCurrentConnection(socket)) return;
+          socketRef.current = null;
           clearTimeout(groupSocketTimeoutRef.current);
           clearTimeout(timeoutIdRef.current);
+          groupSocketTimeoutRef.current = null;
+          timeoutIdRef.current = null;
           console.warn(`WebSocket closed: ${event.reason || 'unknown reason'}`);
           if (extStateRef.current === 'not-authenticated') return; // Don't retry after logout
           if (event.reason !== 'forced' && event.code !== 1000) {
-            setTimeout(() => initWebsocketMessageGroup(), 10000); // Retry after 10 seconds
+            reconnectTimeoutRef.current = setTimeout(() => {
+              reconnectTimeoutRef.current = null;
+              if (isCurrentConnection()) {
+                void initWebsocketMessageGroup();
+              }
+            }, 10000); // Retry after 10 seconds
           }
         };
 
-        socketRef.current.onerror = (error) => {
+        socket.onerror = (error) => {
+          if (!isCurrentConnection(socket)) return;
           console.error('WebSocket error:', error);
           clearTimeout(groupSocketTimeoutRef.current);
           clearTimeout(timeoutIdRef.current);
-          if (socketRef.current) {
-            socketRef.current.close();
-          }
+          groupSocketTimeoutRef.current = null;
+          timeoutIdRef.current = null;
+          socket.close();
         };
       } catch (error) {
         console.error('Error initializing WebSocket:', error);
       }
     };
 
-    initWebsocketMessageGroup(); // Initialize WebSocket on component mount
+    void initWebsocketMessageGroup(); // Initialize WebSocket on component mount
 
     return () => {
+      effectActive = false;
       forceCloseWebSocket(); // Clean up WebSocket on component unmount
     };
-  }, [myAddress, extState]);
+  }, [myAddress, extState, selectedNode?.apikey, selectedNode?.url]);
 
   return null;
 };

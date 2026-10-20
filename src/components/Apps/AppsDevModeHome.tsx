@@ -28,7 +28,10 @@ import { createEndpoint, isUsingLocal } from '../../background/background.ts';
 import ShortUniqueId from 'short-unique-id';
 import swaggerSVG from '../../assets/svgs/swagger.svg';
 import { useTranslation } from 'react-i18next';
-import { getDefaultLocalNodeUrl, LOCALHOST } from '../../constants/constants.ts';
+import {
+  getDefaultLocalNodeUrl,
+  LOCALHOST,
+} from '../../constants/constants.ts';
 import {
   devServerDomainAtom,
   devServerPortAtom,
@@ -51,13 +54,7 @@ export const AppsDevModeHome = ({
   const [port, setPort] = useAtom(devServerPortAtom);
   const [selectedPreviewFile, setSelectedPreviewFile] = useState(null);
   const theme = useTheme();
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
   const { isShow, onCancel, onOk, show, message } = useModal();
   const [openSnackGlobal, setOpenSnackGlobal] = useAtom(openSnackGlobalAtom);
   const [infoSnackCustom, setInfoSnackCustom] = useAtom(infoSnackGlobalAtom);
@@ -176,7 +173,7 @@ export const AppsDevModeHome = ({
       if (tabId) {
         executeEvent('appsDevModeUpdateTab', {
           data: {
-            url: getDefaultLocalNodeUrl() + previewPath,
+            url: getBaseApiReact() + previewPath,
             isPreview: true,
             filePath,
             refreshFunc: (tabId) => {
@@ -189,7 +186,7 @@ export const AppsDevModeHome = ({
       }
       executeEvent('appsDevModeAddTab', {
         data: {
-          url: getDefaultLocalNodeUrl() + previewPath,
+          url: getBaseApiReact() + previewPath,
           isPreview: true,
           filePath,
           refreshFunc: (tabId) => {
@@ -262,7 +259,7 @@ export const AppsDevModeHome = ({
       if (tabId) {
         executeEvent('appsDevModeUpdateTab', {
           data: {
-            url: getDefaultLocalNodeUrl() + previewPath,
+            url: getBaseApiReact() + previewPath,
             isPreview: true,
             directoryPath,
             refreshFunc: (tabId) => {
@@ -275,7 +272,7 @@ export const AppsDevModeHome = ({
       }
       executeEvent('appsDevModeAddTab', {
         data: {
-          url: getDefaultLocalNodeUrl() + previewPath,
+          url: getBaseApiReact() + previewPath,
           isPreview: true,
           directoryPath,
           refreshFunc: (tabId) => {

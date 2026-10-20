@@ -18,7 +18,7 @@ window.addEventListener('message', (event) => {
     return;
   }
 
-  const { type, requestId, payload, error, message } = event.data;
+  const { type, requestId } = event.data;
 
   // Only process messages of type `backgroundMessageResponse`
   if (type !== 'backgroundMessageResponse') return;
@@ -37,8 +37,7 @@ export const sendMessageBackground = async (
   data = {},
   timeout = TIME_MINUTES_10_IN_MILLISECONDS,
   isExtension,
-  appInfo,
-  skipAuth
+  appInfo
 ) => {
   const response_2 = await new Promise((resolve, reject) => {
     const requestId = generateRequestId(); // Unique ID for each request
@@ -53,7 +52,6 @@ export const sendMessageBackground = async (
         payload: data,
         isExtension,
         appInfo,
-        skipAuth,
       },
       targetOrigin
     );
@@ -64,7 +62,7 @@ export const sendMessageBackground = async (
       callbackMap.delete(requestId);
       reject({
         error: 'timeout',
-        message: `Request timed out after ${timeout} ms`,
+        message: `Request timed out after ${timeout} ms (action: ${action})`,
       });
     }, timeout);
 
@@ -86,6 +84,9 @@ export const sendMessageBackground = async (
   } else if (response_2?.error || response_2?.message) {
     return {
       error: response_2.error,
+      ...(typeof response_2?.code === 'string'
+        ? { code: response_2.code }
+        : {}),
       message: response_2?.message || response_2?.error || 'An error occurred',
     };
   }

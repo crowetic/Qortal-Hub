@@ -22,8 +22,6 @@ import { ReturnIcon } from '../../assets/Icons/ReturnIcon';
 import { useAtom } from 'jotai';
 import { appSortAtom } from '../../atoms/appsAtoms';
 import { SortDropdown, SortOption } from './Filters';
-import { appHeighOffsetPx } from '../Desktop/CustomTitleBar';
-import { APPS_BOTTOM_NAV_HEIGHT_PX } from './Apps-styles';
 
 // Sorting function (same as CommunityAppsTab)
 const sortApps = (apps: any[], sortOption: SortOption): any[] => {
@@ -40,6 +38,8 @@ const sortApps = (apps: any[], sortOption: SortOption): any[] => {
         const titleB = (b.metadata?.title || b.name || '').toLowerCase();
         return titleA.localeCompare(titleB);
       });
+    case 'recently_updated':
+      return sorted.sort((a, b) => (b.updated || 0) - (a.updated || 0));
     default:
       return sorted;
   }
@@ -50,17 +50,12 @@ export const AppsCategoryDesktop = ({
   myName,
   category,
   isShow,
+  contentHeight,
 }) => {
   const [searchValue, setSearchValue] = useState('');
   const [sortOption, setSortOption] = useAtom(appSortAtom);
   const theme = useTheme();
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
 
   const categoryList = useMemo(() => {
     if (category?.id === 'all') return availableQapps;
@@ -102,7 +97,7 @@ export const AppsCategoryDesktop = ({
     <AppsLibraryContainer
       sx={{
         display: !isShow && 'none',
-        height: `calc(100vh - ${appHeighOffsetPx} )`,
+        height: contentHeight || '100%',
         overflow: 'hidden',
         padding: '0px',
         paddingTop: '30px',
@@ -190,7 +185,7 @@ export const AppsCategoryDesktop = ({
       <AppsDesktopLibraryBody
         sx={{
           alignItems: 'center',
-          height: `calc(100vh - ${appHeighOffsetPx}  - 36px)`,
+          height: 'calc(100% - 36px)',
           overflow: 'auto',
           padding: '0px',
           width: '90%',

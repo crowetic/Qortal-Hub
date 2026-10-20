@@ -1,77 +1,62 @@
-import Snackbar, { SnackbarCloseReason } from '@mui/material/Snackbar';
-import Alert from '@mui/material/Alert';
-import { useTheme } from '@mui/material/styles';
+import { useEffect, useRef } from 'react';
+import { executeEvent } from '../../utils/events';
 
-const snackbarAlertSx = (theme) => ({
-  width: '100%',
-  maxWidth: '420px',
-  fontFamily: 'Inter',
-  fontSize: '15px',
-  fontWeight: 500,
-  borderRadius: '14px',
-  boxShadow: theme.shadows[8],
-  padding: '14px 18px',
-  alignItems: 'center',
-  '& .MuiAlert-icon': {
-    alignItems: 'center',
-    fontSize: '22px',
-  },
-  '& .MuiAlert-message': {
-    padding: '0 4px',
-    lineHeight: 1.4,
-  },
-  '& .MuiAlert-action': {
-    alignItems: 'center',
-    paddingLeft: 1,
-  },
-});
+const getSnackbarDisplayMessage = (message: unknown) => {
+  if (typeof message !== 'string') return message;
+
+  if (
+    /transaction\s+invalid/i.test(message) &&
+    /account\s+is\s+not\s+a\s+group\s+member/i.test(message)
+  ) {
+    return 'Invalid transaction. Account is not a group member.';
+  }
+
+  return message;
+};
 
 export const CustomizedSnackbars = ({
   open,
   setOpen,
   info,
   setInfo,
-  duration = 6000,
 }) => {
-  const theme = useTheme();
-  const handleClose = (
-    event?: React.SyntheticEvent | Event,
-    reason?: SnackbarCloseReason
-  ) => {
-    if (reason === 'clickaway') {
+  const lastSignatureRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !info?.message) {
+      lastSignatureRef.current = null;
       return;
     }
+
+    const displayMessage = getSnackbarDisplayMessage(info.message);
+    const signature = JSON.stringify({
+      compact: info?.compact ?? false,
+      duration: info?.duration ?? undefined,
+      message: displayMessage,
+      type: info?.type ?? 'info',
+    });
+
+    if (lastSignatureRef.current === signature) return;
+    lastSignatureRef.current = signature;
+
+    executeEvent('openGlobalSnackBar', {
+      compact: info?.compact,
+      duration: info?.duration,
+      message: displayMessage,
+      type: info?.type,
+    });
+
     setOpen(false);
     setInfo(null);
-  };
+  }, [
+    info?.compact,
+    info?.duration,
+    info?.message,
+    info?.type,
+    open,
+    setInfo,
+    setOpen,
+  ]);
 
-  if (!open) return null;
-
-  return (
-    <Snackbar
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      open={open}
-      autoHideDuration={info?.duration === null ? null : duration || 6000}
-      onClose={handleClose}
-      sx={{
-        bottom: { xs: 16, sm: 24 },
-        '&.MuiSnackbar-root': {
-          display: 'flex',
-          justifyContent: 'center',
-          left: '50%',
-          right: 'auto',
-          transform: 'translateX(-50%)',
-        },
-      }}
-    >
-      <Alert
-        onClose={handleClose}
-        severity={info?.type}
-        variant="filled"
-        sx={snackbarAlertSx(theme)}
-      >
-        {info?.message}
-      </Alert>
-    </Snackbar>
-  );
+  return null;
 };

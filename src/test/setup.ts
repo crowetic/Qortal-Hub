@@ -1,5 +1,30 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
+import { app } from 'electron';
+import path from 'node:path';
+import { configureNativeRuntimeEnvironment } from '../../electron/src/native-runtime-environment';
+
+configureNativeRuntimeEnvironment({
+  path: (name) => app.getPath(name),
+  resources: () => path.resolve('electron/resources'),
+  packaged: () => app.isPackaged === true,
+  ready: () => app.isReady?.() ?? false,
+});
+
+Object.defineProperties(HTMLMediaElement.prototype, {
+  load: {
+    configurable: true,
+    value: vi.fn(),
+  },
+  pause: {
+    configurable: true,
+    value: vi.fn(),
+  },
+  play: {
+    configurable: true,
+    value: vi.fn().mockResolvedValue(undefined),
+  },
+});
 
 vi.mock('@evva/capacitor-secure-storage-plugin', () => ({
   SecureStoragePlugin: {

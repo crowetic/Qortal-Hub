@@ -1,9 +1,10 @@
 // @ts-nocheck
 import '../qortal/qortal-requests.ts';
+import { getNotificationOsPushDisabled } from '../qortal/qortal-requests';
 import { isArray } from 'lodash';
 import { uint8ArrayToObject } from '../encryption/encryption.ts';
 import Base58 from '../encryption/Base58';
-import axios from 'axios';
+import i18n from 'i18next';
 import {
   base64ToUint8Array,
   decryptSingle,
@@ -16,21 +17,19 @@ import { signChat } from '../transactions/signChat';
 import { createTransaction } from '../transactions/transactions';
 import { decryptChatMessage } from '../utils/decryptChatMessage';
 import { decryptStoredWallet } from '../utils/decryptWallet';
+import { getWalletErrorMessage } from '../utils/walletErrorMessages';
 import PhraseWallet from '../utils/generateWallet/phrase-wallet';
 import { RequestQueueWithPromise } from '../utils/queue/queue';
 import { validateAddress } from '../utils/validateAddress';
+import { hasInvisibleCharacters } from '../utils/hasInvisibleCharacters';
 import { Sha256 } from 'asmcrypto.js';
 import { TradeBotRespondMultipleRequest } from '../transactions/TradeBotRespondMultipleRequest';
 import {
   API_ENDPOINTS,
   EXT_NODE_QORTAL_LINK,
   getDefaultLocalNodeUrl,
-  HTTPS_QORT_TRADE,
-  HTTPS_TRADE_NODE,
   LOCALHOST_12391,
-  MIN_REQUIRED_QORTS,
   RESOURCE_TYPE_NUMBER_GROUP_CHAT_REACTIONS,
-  TIME_MINUTES_3_IN_MILLISECONDS,
   TIME_MINUTES_10_IN_MILLISECONDS,
   TIME_WEEKS_1_IN_MILLISECONDS,
   TIME_MINUTES_6_IN_MILLISECONDS,
@@ -65,6 +64,14 @@ import {
   getGroupDataSingleCase,
   getGroupNotificationTimestampCase,
   getRewardSharePrivateKeyCase,
+  signPresenceMessageCase,
+  signReticulumChatEventCase,
+  getRelayGroupHintsCase,
+  decryptBoxWithMyKeyCase,
+  encryptSupportMessageCase,
+  decryptSupportMessageCase,
+  encryptSupportAttachmentCase,
+  decryptSupportAttachmentCase,
   getTempPublishCase,
   getThreadActivityCase,
   getTimestampEnterChatCase,
@@ -79,6 +86,7 @@ import {
   listActionsCase,
   ltcBalanceCase,
   makeAdminCase,
+  markAllMemberGroupsReadCase,
   nameCase,
   notifyAdminRegenerateSecretKeyCase,
   pauseAllQueuesCase,
@@ -97,8 +105,11 @@ import {
   setGroupDataCase,
   setupGroupWebsocketCase,
   updateThreadActivityCase,
+  updateNameCase,
   userInfoCase,
   validApiCase,
+  validateGroupAdminsCase,
+  validateGroupMembersCase,
   versionCase,
   voteOnPollCase,
 } from '../background/background-cases';
@@ -127,7 +138,6 @@ export function getProtocol(url) {
 
 export const gateways = [EXT_NODE_QORTAL_LINK];
 
-let lastGroupNotification;
 export const groupApi = 'https://' + EXT_NODE_QORTAL_LINK;
 export const groupApiSocket = 'wss://' + EXT_NODE_QORTAL_LINK;
 export const groupApiLocal = getDefaultLocalNodeUrl();
@@ -136,7 +146,12 @@ export const groupApiSocketLocal = 'ws://' + LOCALHOST_12391;
 const timeDifferenceForNotificationChatsBackground = 86400000;
 const requestQueueAnnouncements = new RequestQueueWithPromise(1);
 
+const generalNotificationPayloadById = new Map();
+
 function handleNotificationClick(notificationId) {
+  if (typeof window?.electronAPI?.focusWindow === 'function') {
+    window.electronAPI.focusWindow();
+  }
   // Decode the notificationId if it was encoded
   const decodedNotificationId = decodeURIComponent(notificationId);
 
@@ -147,6 +162,9 @@ function handleNotificationClick(notificationId) {
     '_type=group-announcement_'
   );
   const isNewThreadPost = decodedNotificationId.includes('_type=thread-post_');
+  const isGeneralNotification = decodedNotificationId.includes(
+    '_type=general-notification'
+  );
 
   // Helper function to extract parameter values safely
   function getParameterValue(id, key) {
@@ -155,7 +173,16 @@ function handleNotificationClick(notificationId) {
   }
   const targetOrigin = window.location.origin;
   // Handle specific notification types and post the message accordingly
-  if (isDirect) {
+  if (isGeneralNotification) {
+    const payload = generalNotificationPayloadById.get(notificationId);
+    generalNotificationPayloadById.delete(notificationId);
+    if (payload) {
+      window.postMessage(
+        { action: 'NOTIFICATION_OPEN_APP', payload },
+        targetOrigin
+      );
+    }
+  } else if (isDirect) {
     const fromValue = getParameterValue(decodedNotificationId, '_from');
     window.postMessage(
       { action: 'NOTIFICATION_OPEN_DIRECT', payload: { from: fromValue } },
@@ -226,20 +253,18 @@ export const clearAllQueues = () => {
 };
 
 export const getForeignKey = async (foreignBlockchain) => {
+  if (
+    ['BITCOIN', 'LITECOIN', 'DOGECOIN', 'DIGIBYTE', 'RAVENCOIN'].includes(
+      foreignBlockchain
+    )
+  ) {
+    throw new Error(i18n.t('question:local_send.upgrade'));
+  }
+
   const resKeyPair = await getKeyPair();
   const parsedData = resKeyPair;
 
   switch (foreignBlockchain) {
-    case 'LITECOIN':
-      return parsedData.ltcPrivateKey;
-    case 'DOGECOIN':
-      return parsedData.dogePrivateKey;
-    case 'BITCOIN':
-      return parsedData.btcPrivateKey;
-    case 'DIGIBYTE':
-      return parsedData.dgbPrivateKey;
-    case 'RAVENCOIN':
-      return parsedData.rvnPrivateKey;
     case 'PIRATECHAIN':
       return parsedData.arrrSeed58;
     default:
@@ -275,9 +300,9 @@ export const getCustomNodesFromStorage = async (): Promise<any | null> => {
 const getArbitraryEndpoint = async () => {
   const apiKey = await getApiKeyFromStorage(); // Retrieve apiKey asynchronously
   if (apiKey) {
-    return `/arbitrary/resources/searchsimple`;
+    return `/arbitrary/resources/search`;
   } else {
-    return `/arbitrary/resources/searchsimple`;
+    return `/arbitrary/resources/search`;
   }
 };
 
@@ -322,8 +347,6 @@ export const createEndpoint = async (endpoint, customApi?: string) => {
 
 export const walletVersion = 2;
 
-const proxyAccountAddress = 'QXPejUe5Za1KD3zCMViWCX35AreMQ9H7ku';
-const proxyAccountPublicKey = '5hP6stDWybojoDw5t8z9D51nV945oMPX7qBd29rhX1G7';
 const pendingResponses = new Map();
 
 let groups = null;
@@ -396,28 +419,6 @@ export function isUpdateMsg(data) {
   return isUpdateMessage;
 }
 
-async function checkWebviewFocus() {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      resolve(false); // No response within 1 second, assume not focused
-    }, 1000);
-    const targetOrigin = window.location.origin;
-    // Send a message to check focus
-    window.postMessage({ action: 'CHECK_FOCUS' }, targetOrigin);
-
-    // Listen for the response
-    const handleMessage = (event) => {
-      if (event.data?.action === 'CHECK_FOCUS_RESPONSE') {
-        clearTimeout(timeout);
-        window.removeEventListener('message', handleMessage); // Clean up listener
-        resolve(event.data.isFocused); // Resolve with the response
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-  });
-}
-
 const worker = new ChatComputePowWorker();
 
 export async function performPowTask(chatBytes, difficulty) {
@@ -442,127 +443,6 @@ export async function performPowTask(chatBytes, difficulty) {
     });
   });
 }
-
-const handleNotificationDirect = async (directs) => {
-  let isFocused;
-  const wallet = await getSaveWallet();
-  const address = wallet.address0;
-  const isDisableNotifications =
-    (await getUserSettings({ key: 'disable-push-notifications' })) || false;
-  const dataDirects = directs.filter((direct) => direct?.sender !== address);
-  try {
-    if (isDisableNotifications) return;
-    if (!dataDirects || dataDirects?.length === 0) return;
-    isFocused = await checkWebviewFocus();
-
-    if (isFocused) {
-      throw new Error('isFocused');
-    }
-    const newActiveChats = dataDirects;
-    const oldActiveChats = await getChatHeadsDirect();
-
-    if (newActiveChats?.length === 0) return;
-
-    let newestLatestTimestamp = null;
-    let oldestLatestTimestamp = null;
-    // Find the latest timestamp from newActiveChats
-    newActiveChats?.forEach((newChat) => {
-      if (
-        !newestLatestTimestamp ||
-        newChat?.timestamp > newestLatestTimestamp?.timestamp
-      ) {
-        newestLatestTimestamp = newChat;
-      }
-    });
-
-    // Find the latest timestamp from oldActiveChats
-    oldActiveChats?.forEach((oldChat) => {
-      if (
-        !oldestLatestTimestamp ||
-        oldChat?.timestamp > oldestLatestTimestamp?.timestamp
-      ) {
-        oldestLatestTimestamp = oldChat;
-      }
-    });
-
-    if (
-      (checkDifference(newestLatestTimestamp.timestamp) &&
-        !oldestLatestTimestamp) ||
-      (newestLatestTimestamp &&
-        newestLatestTimestamp?.timestamp > oldestLatestTimestamp?.timestamp)
-    ) {
-      // Create the notification and assign the onclick handler
-      const title = `New Direct message! ${
-        newestLatestTimestamp?.name ? `from ${newestLatestTimestamp.name}` : ''
-      }`;
-      const body = 'You have received a new direct message';
-      const notificationId = encodeURIComponent(
-        'chat_notification_' +
-          Date.now() +
-          '_type=direct' +
-          `_from=${newestLatestTimestamp.address}`
-      );
-      const notification = new window.Notification(title, {
-        body,
-        icon: window.location.origin + '/qortal192.png',
-        data: { id: notificationId },
-      });
-
-      // Set up the onclick event to call the handler function
-      notification.onclick = () => {
-        handleNotificationClick(notificationId);
-        notification.close();
-      };
-
-      setTimeout(() => {
-        notification.close();
-      }, 10000);
-    }
-  } catch (error) {
-    if (!isFocused) {
-      window
-        .sendMessage('notification', {})
-        .then((response) => {
-          if (!response?.error) {
-            // Handle success if needed
-          }
-        })
-        .catch((error) => {
-          console.error(
-            'Failed to send notification:',
-            error.message || 'An error occurred'
-          );
-        });
-
-      // Create a unique notification ID with type and sender information
-      const notificationId = encodeURIComponent(
-        'chat_notification_' + Date.now() + '_type=direct' + `_from=""`
-      );
-
-      const title = 'New Direct message!';
-      const body = 'You have received a new direct message';
-
-      const notification = new window.Notification(title, {
-        body,
-        icon: window.location.origin + '/qortal192.png',
-        data: { id: notificationId },
-      });
-
-      // Handle notification click with specific actions based on `notificationId`
-      notification.onclick = () => {
-        handleNotificationClick(notificationId);
-        notification.close(); // Clean up the notification on click
-      };
-
-      // Automatically close the notification after 5 seconds if not clicked
-      setTimeout(() => {
-        notification.close();
-      }, 10000); // Close after 5 seconds
-    }
-  } finally {
-    setChatHeadsDirect(dataDirects);
-  }
-};
 
 async function getThreadActivity(): Promise<any | null> {
   const wallet = await getSaveWallet();
@@ -651,149 +531,6 @@ export function updateThreadActivity({
     localStorage.setItem(key, JSON.stringify(threads));
   });
 }
-
-const handleNotification = async (groups) => {
-  const wallet = await getSaveWallet();
-  const address = wallet.address0;
-  const isDisableNotifications =
-    (await getUserSettings({ key: 'disable-push-notifications' })) || false;
-
-  let mutedGroups = (await getUserSettings({ key: 'mutedGroups' })) || [];
-  if (!isArray(mutedGroups)) mutedGroups = [];
-  mutedGroups.push('0');
-  let isFocused;
-  const data = groups.filter(
-    (group) => group?.sender !== address && !mutedGroups.includes(group.groupId)
-  );
-  const dataWithUpdates = groups.filter(
-    (group) => group?.sender !== address && !mutedGroups.includes(group.groupId)
-  );
-
-  try {
-    if (isDisableNotifications) return;
-    if (!data || data?.length === 0) return;
-    isFocused = await checkWebviewFocus();
-
-    if (isFocused) {
-      throw new Error('isFocused');
-    }
-    const newActiveChats = data;
-    const oldActiveChats = await getChatHeads();
-
-    let newestLatestTimestamp = null;
-    let oldestLatestTimestamp = null;
-    // Find the latest timestamp from newActiveChats
-    newActiveChats?.forEach((newChat) => {
-      if (
-        !newestLatestTimestamp ||
-        newChat?.timestamp > newestLatestTimestamp?.timestamp
-      ) {
-        newestLatestTimestamp = newChat;
-      }
-    });
-
-    // Find the latest timestamp from oldActiveChats
-    oldActiveChats?.forEach((oldChat) => {
-      if (
-        !oldestLatestTimestamp ||
-        oldChat?.timestamp > oldestLatestTimestamp?.timestamp
-      ) {
-        oldestLatestTimestamp = oldChat;
-      }
-    });
-
-    if (
-      (checkDifference(newestLatestTimestamp.timestamp) &&
-        !oldestLatestTimestamp) ||
-      (newestLatestTimestamp &&
-        newestLatestTimestamp?.timestamp > oldestLatestTimestamp?.timestamp)
-    ) {
-      if (
-        !lastGroupNotification ||
-        Date.now() - lastGroupNotification >= 120000
-      ) {
-        if (!newestLatestTimestamp?.data) return;
-
-        // Create a unique notification ID with type and group information
-        const notificationId = encodeURIComponent(
-          'chat_notification_' +
-            Date.now() +
-            '_type=group' +
-            `_from=${newestLatestTimestamp.groupId}`
-        );
-
-        const title = 'New Group Message!';
-        const body = `You have received a new message from ${newestLatestTimestamp?.groupName}`;
-
-        const notification = new window.Notification(title, {
-          body,
-          icon: window.location.origin + '/qortal192.png',
-          data: { id: notificationId },
-        });
-
-        // Handle notification click with specific actions based on `notificationId`
-        notification.onclick = () => {
-          handleNotificationClick(notificationId);
-          notification.close(); // Clean up the notification on click
-        };
-
-        // Automatically close the notification after 5 seconds if not clicked
-        setTimeout(() => {
-          notification.close();
-        }, 10000); // Close after 5 seconds
-
-        lastGroupNotification = Date.now();
-      }
-    }
-  } catch (error) {
-    if (!isFocused) {
-      window
-        .sendMessage('notification', {})
-        .then((response) => {
-          if (!response?.error) {
-            // Handle success if needed
-          }
-        })
-        .catch((error) => {
-          console.error(
-            'Failed to send notification:',
-            error.message || 'An error occurred'
-          );
-        });
-
-      // Generate a unique notification ID
-      const notificationId = encodeURIComponent(
-        'chat_notification_' + Date.now()
-      );
-
-      const title = 'New Group Message!';
-      const body = 'You have received a new message from one of your groups';
-
-      // Create and show the notification immediately
-      const notification = new window.Notification(title, {
-        body,
-        icon: window.location.origin + '/qortal192.png',
-        data: { id: notificationId },
-      });
-
-      // Handle notification click, allowing specific actions based on `notificationId`
-      notification.onclick = () => {
-        handleNotificationClick(notificationId);
-        notification.close(); // Clean up the notification on click
-      };
-
-      // Automatically close the notification after 5 seconds if it’s not clicked
-      setTimeout(() => {
-        notification.close();
-      }, 10000); // Close after 5 seconds
-
-      lastGroupNotification = Date.now();
-    }
-  } finally {
-    if (!data || data?.length === 0) return;
-    setChatHeads(dataWithUpdates);
-  }
-};
 
 const forceCloseWebSocket = () => {
   if (socket) {
@@ -912,23 +649,6 @@ export async function getUserInfo() {
 async function connection(hostname: string) {
   const isConnected = await getData<any>(hostname).catch(() => null);
   return isConnected;
-}
-
-async function getTradeInfo(qortalAtAddress) {
-  const response = await fetch(
-    HTTPS_TRADE_NODE + '/crosschain/trade/' + qortalAtAddress
-  );
-  if (!response?.ok) throw new Error('Cannot crosschain trade information');
-  const data = await response.json();
-  return data;
-}
-
-async function getTradesInfo(qortalAtAddresses) {
-  // Use Promise.all to fetch data for all addresses concurrently
-  const trades = await Promise.all(
-    qortalAtAddresses.map((address) => getTradeInfo(address))
-  );
-  return trades; // Return the array of trade info objects
 }
 
 export async function getBalanceInfo() {
@@ -1376,7 +1096,7 @@ export async function decryptWallet({ password, wallet, walletVersion }) {
 
     return true;
   } catch (error) {
-    throw new Error(error.message);
+    throw new Error(getWalletErrorMessage(error));
   }
 }
 
@@ -1484,8 +1204,6 @@ export async function handleActiveGroupDataFromSocket({ groups, directs }) {
       targetOrigin
     );
 
-    groups = groups;
-    directs = directs;
     const activeData = {
       groups: groups || [], // Your groups data here
       directs: directs || [], // Your directs data here
@@ -1494,131 +1212,9 @@ export async function handleActiveGroupDataFromSocket({ groups, directs }) {
     storeData('active-groups-directs', activeData).catch((error) => {
       console.error('Error saving data:', error);
     });
-
-    try {
-      handleNotification(groups);
-      handleNotificationDirect(directs);
-    } catch (error) {
-      console.log(error);
-    }
   } catch (error) {
     console.log(error);
   }
-}
-
-async function sendChatForBuyOrder({
-  qortAddress,
-  recipientPublicKey,
-  message,
-  atAddresses,
-  isSingle,
-}) {
-  let _reference = new Uint8Array(64);
-  self.crypto.getRandomValues(_reference);
-
-  let sendTimestamp = Date.now();
-  const wallet = await getSaveWallet();
-  const address = wallet.address0;
-  let reference = Base58.encode(_reference);
-  const resKeyPair = await getKeyPair();
-  const parsedData = resKeyPair;
-  const uint8PrivateKey = Base58.decode(parsedData.privateKey);
-  const uint8PublicKey = Base58.decode(parsedData.publicKey);
-  const keyPair = {
-    privateKey: uint8PrivateKey,
-    publicKey: uint8PublicKey,
-  };
-  const balance = await getBalanceInfo();
-  const hasEnoughBalance = +balance < MIN_REQUIRED_QORTS ? false : true;
-  const jsonData = {
-    addresses: message.addresses,
-    foreignKey: message.foreignKey,
-    receivingAddress: message.receivingAddress,
-  };
-  const finalJson = {
-    callRequest: jsonData,
-    extra: {
-      type: isSingle ? 'single' : 'multiple',
-    },
-  };
-  const messageStringified = JSON.stringify(finalJson);
-
-  const tx = await createTransaction(18, keyPair, {
-    timestamp: sendTimestamp,
-    recipient: qortAddress,
-    recipientPublicKey: recipientPublicKey,
-    hasChatReference: 0,
-    message: messageStringified,
-    lastReference: reference,
-    proofOfWorkNonce: 0,
-    isEncrypted: 1,
-    isText: 1,
-  });
-  //TODO
-  // if (!hasEnoughBalance) {
-  if (!hasEnoughBalance) {
-    const _encryptedMessage = tx._encryptedMessage;
-    const encryptedMessageToBase58 = Base58.encode(_encryptedMessage);
-    const signature =
-      'id-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
-    const checkGatewayStatusRes = await fetch(
-      `${HTTPS_TRADE_NODE}/admin/status`
-    );
-    const checkGatewayStatusData = await checkGatewayStatusRes.json();
-    if (
-      +checkGatewayStatusData?.syncPercent !== 100 ||
-      checkGatewayStatusData?.isSynchronizing !== false
-    ) {
-      throw new Error('Cannot make trade. Gateway node is synchronizing');
-    }
-    const healthCheckRes = await fetch(
-      HTTPS_QORT_TRADE + '/api/transaction/healthcheck'
-    );
-    const healthcheckData = await healthCheckRes.json();
-    if (healthcheckData?.dbConnection !== 'healthy') {
-      throw new Error('Could not connect to db. Try again later.');
-    }
-    const res = await axios.post(
-      HTTPS_QORT_TRADE + `/api/transaction/updatetxgateway`,
-      {
-        qortalAtAddresses: atAddresses,
-        qortAddress: address,
-        node: HTTPS_TRADE_NODE,
-        status: 'message-sent',
-        encryptedMessageToBase58,
-        signature,
-        reference,
-        senderPublicKey: parsedData.publicKey,
-        sender: address,
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    return {
-      encryptedMessageToBase58,
-      status: 'message-sent',
-      signature,
-    };
-  }
-
-  const chatBytes = tx.chatBytes;
-  const difficulty = 8;
-  const { nonce, chatBytesArray } = await performPowTask(chatBytes, difficulty);
-
-  let _response = await signChatFunc(
-    chatBytesArray,
-    nonce,
-    HTTPS_TRADE_NODE,
-    keyPair
-  );
-  if (_response?.error) {
-    throw new Error(_response?.message);
-  }
-  return _response;
 }
 
 export async function sendChatGroup({
@@ -1791,7 +1387,19 @@ export async function decryptSingleForPublishes({
 }
 
 export async function decryptDirectFunc({ messages, involvingAddress }) {
-  const senderPublicKey = await getPublicKey(involvingAddress);
+  let senderPublicKey;
+  try {
+    senderPublicKey = await getPublicKey(involvingAddress);
+  } catch (error) {
+    console.warn(
+      '[DirectChat] Unable to decrypt direct messages: missing sender public key',
+      {
+        involvingAddress,
+        error: error?.message || String(error),
+      }
+    );
+    return [];
+  }
   let holdMessages = [];
 
   const resKeyPair = await getKeyPair();
@@ -1824,143 +1432,60 @@ export async function createBuyOrderTx({
   isGateway,
   foreignBlockchain,
 }) {
-  try {
-    if (!isGateway) {
-      const wallet = await getSaveWallet();
-
-      const address = wallet.address0;
-      let message;
-      if (foreignBlockchain === 'PIRATECHAIN') {
-        message = {
-          atAddress: crosschainAtInfo[0].qortalAtAddress,
-          foreignKey: await getForeignKey(foreignBlockchain),
-          receivingAddress: address,
-        };
-      } else {
-        message = {
-          addresses: crosschainAtInfo.map((order) => order.qortalAtAddress),
-          foreignKey: await getForeignKey(foreignBlockchain),
-          receivingAddress: address,
-        };
-      }
-
-      let responseVar;
-      let txn;
-      let url;
-      if (foreignBlockchain === 'PIRATECHAIN') {
-        txn = new TradeBotRespondRequest().createTransaction(message);
-
-        url = await createEndpoint('/crosschain/tradebot/respond');
-      } else {
-        txn = new TradeBotRespondMultipleRequest().createTransaction(message);
-
-        url = await createEndpoint('/crosschain/tradebot/respondmultiple');
-      }
-
-      const responseFetch = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(txn),
-      });
-
-      const res = await responseFetch.json();
-      if (res?.error && res?.message) {
-        throw new Error(res?.message);
-      }
-      if (!responseFetch?.ok) throw new Error('Failed to submit buy order');
-
-      if (res === false) {
-        responseVar = {
-          response: 'Unable to execute buy order',
-          success: false,
-        };
-      } else {
-        responseVar = { response: res, success: true };
-      }
-      const { response, success } = responseVar;
-      let responseMessage;
-      if (success) {
-        responseMessage = {
-          callResponse: response,
-          extra: {
-            message: 'Transaction processed successfully!',
-            atAddresses:
-              foreignBlockchain === 'PIRATECHAIN'
-                ? [crosschainAtInfo[0].qortalAtAddress]
-                : crosschainAtInfo.map((order) => order.qortalAtAddress),
-            senderAddress: address,
-            node: url,
-          },
-        };
-      } else {
-        responseMessage = {
-          callResponse: 'ERROR',
-          extra: {
-            message: response,
-            atAddresses:
-              foreignBlockchain === 'PIRATECHAIN'
-                ? [crosschainAtInfo[0].qortalAtAddress]
-                : crosschainAtInfo.map((order) => order.qortalAtAddress),
-            senderAddress: address,
-            node: url,
-          },
-        };
-      }
-
-      return responseMessage;
-    }
-    const wallet = await getSaveWallet();
-    const address = wallet.address0;
-
-    const message = {
-      addresses:
-        foreignBlockchain === 'PIRATECHAIN'
-          ? [crosschainAtInfo[0].qortalAtAddress]
-          : crosschainAtInfo.map((order) => order.qortalAtAddress),
-      foreignKey: await getForeignKey(foreignBlockchain),
-      receivingAddress: address,
-    };
-    const res = await sendChatForBuyOrder({
-      qortAddress: proxyAccountAddress,
-      recipientPublicKey: proxyAccountPublicKey,
-      message,
-      atAddresses:
-        foreignBlockchain === 'PIRATECHAIN'
-          ? [crosschainAtInfo[0].qortalAtAddress]
-          : crosschainAtInfo.map((order) => order.qortalAtAddress),
-      isSingle: foreignBlockchain === 'PIRATECHAIN',
-    });
-
-    if (res?.signature) {
-      const message = await listenForChatMessageForBuyOrder({
-        nodeBaseUrl: HTTPS_TRADE_NODE,
-        senderAddress: proxyAccountAddress,
-        senderPublicKey: proxyAccountPublicKey,
-        signature: res?.signature,
-      });
-
-      const responseMessage = {
-        callResponse: message.callResponse,
-        extra: {
-          message: message?.extra?.message,
-          senderAddress: address,
-          node: HTTPS_TRADE_NODE,
-          atAddresses:
-            foreignBlockchain === 'PIRATECHAIN'
-              ? [crosschainAtInfo[0].qortalAtAddress]
-              : crosschainAtInfo.map((order) => order.qortalAtAddress),
-        },
-      };
-
-      return responseMessage;
-    } else {
-      throw new Error('Unable to send buy order message');
-    }
-  } catch (error) {
-    throw new Error(error.message);
+  if (isGateway) {
+    throw new Error(
+      i18n.t('question:message.generic.no_action_public_node', {
+        postProcess: 'capitalizeFirstChar',
+      })
+    );
   }
+
+  const wallet = await getSaveWallet();
+  const address = wallet.address0;
+  const isPirateChain = foreignBlockchain === 'PIRATECHAIN';
+  const atAddresses = crosschainAtInfo.map((order) => order.qortalAtAddress);
+  const message = isPirateChain
+    ? {
+        atAddress: atAddresses[0],
+        foreignKey: await getForeignKey(foreignBlockchain),
+        receivingAddress: address,
+      }
+    : {
+        addresses: atAddresses,
+        foreignKey: await getForeignKey(foreignBlockchain),
+        receivingAddress: address,
+      };
+  const txn = isPirateChain
+    ? new TradeBotRespondRequest().createTransaction(message)
+    : new TradeBotRespondMultipleRequest().createTransaction(message);
+  const url = await createEndpoint(
+    isPirateChain
+      ? '/crosschain/tradebot/respond'
+      : '/crosschain/tradebot/respondmultiple'
+  );
+  const responseFetch = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(txn),
+  });
+  const response = await responseFetch.json();
+  if (response?.error && response?.message) {
+    throw new Error(response.message);
+  }
+  if (!responseFetch.ok) throw new Error('Failed to submit buy order');
+
+  const success = response !== false;
+  return {
+    callResponse: success ? response : 'ERROR',
+    extra: {
+      message: success
+        ? 'Transaction processed successfully!'
+        : 'Unable to execute buy order',
+      atAddresses: isPirateChain ? [atAddresses[0]] : atAddresses,
+      senderAddress: address,
+      node: url,
+    },
+  };
 }
 
 export async function sendChatNotification(
@@ -2561,6 +2086,10 @@ export async function sendCoin(
   skipConfirmPassword
 ) {
   try {
+    if (!validateAddress(receiver) && hasInvisibleCharacters(receiver)) {
+      throw new Error('Recipient name contains invisible characters');
+    }
+
     const confirmReceiver = await getNameOrAddress(receiver);
     if (confirmReceiver.error)
       throw new Error('Invalid receiver address or name');
@@ -2635,69 +2164,6 @@ function fetchMessages(apiCall) {
   });
 }
 
-async function fetchMessagesForBuyOrders(apiCall, signature, senderPublicKey) {
-  let retryDelay = 2000; // Start with a 2-second delay
-  const maxDuration = 360000 * 2; // Maximum duration set to 12 minutes
-  const startTime = Date.now(); // Record the start time
-  let triedChatMessage = [];
-  // Promise to handle polling logic
-  await new Promise((res) => {
-    setTimeout(() => {
-      res();
-    }, 40000);
-  });
-  return new Promise((resolve, reject) => {
-    const attemptFetch = async () => {
-      if (Date.now() - startTime > maxDuration) {
-        return reject(new Error('Maximum polling time exceeded'));
-      }
-
-      try {
-        const response = await fetch(apiCall);
-        let data = await response.json();
-
-        data = data.filter(
-          (item) => !triedChatMessage.includes(item.signature)
-        );
-        if (data && data.length > 0) {
-          const encodedMessageObj = data[0];
-          const resKeyPair = await getKeyPair();
-          const parsedData = resKeyPair;
-          const uint8PrivateKey = Base58.decode(parsedData.privateKey);
-          const uint8PublicKey = Base58.decode(parsedData.publicKey);
-          const keyPair = {
-            privateKey: uint8PrivateKey,
-            publicKey: uint8PublicKey,
-          };
-
-          const decodedMessage = decryptChatMessage(
-            encodedMessageObj.data,
-            keyPair.privateKey,
-            senderPublicKey,
-            encodedMessageObj.reference
-          );
-          const parsedMessage = JSON.parse(decodedMessage);
-          if (parsedMessage?.extra?.chatRequestSignature === signature) {
-            resolve(parsedMessage);
-          } else {
-            triedChatMessage.push(encodedMessageObj.signature);
-            setTimeout(attemptFetch, retryDelay);
-            retryDelay = Math.min(retryDelay * 2, 360000); // Ensure delay does not exceed 6 minutes
-          }
-          // Resolve the promise when data is found
-        } else {
-          setTimeout(attemptFetch, retryDelay);
-          retryDelay = Math.min(retryDelay * 2, 360000); // Ensure delay does not exceed 6 minutes
-        }
-      } catch (error) {
-        reject(error); // Reject the promise on error
-      }
-    };
-
-    attemptFetch(); // Initial call to start the polling
-  });
-}
-
 async function listenForChatMessage({
   nodeBaseUrl,
   senderAddress,
@@ -2743,49 +2209,6 @@ async function listenForChatMessage({
   }
 }
 
-async function listenForChatMessageForBuyOrder({
-  nodeBaseUrl,
-  senderAddress,
-  senderPublicKey,
-  signature,
-}) {
-  try {
-    let validApi = '';
-    const checkIfNodeBaseUrlIsAcceptable = API_ENDPOINTS.find(
-      (item) => item === nodeBaseUrl
-    );
-    if (checkIfNodeBaseUrlIsAcceptable) {
-      validApi = checkIfNodeBaseUrlIsAcceptable;
-    } else {
-      validApi = await findUsableApi();
-    }
-    const wallet = await getSaveWallet();
-    const address = wallet.address0;
-    const before = Date.now() + 1200000;
-    const after = Date.now();
-    const apiCall = `${validApi}/chat/messages?involving=${senderAddress}&involving=${address}&reverse=true&limit=1&before=${before}&after=${after}&encoding=BASE64`;
-    const parsedMessageObj = await fetchMessagesForBuyOrders(
-      apiCall,
-      signature,
-      senderPublicKey
-    );
-
-    return parsedMessageObj;
-
-    // chrome.tabs.query({}, function (tabs) {
-    //   tabs.forEach((tab) => {
-    //     chrome.tabs.sendMessage(tab.id, {
-    //       type: "RESPONSE_FOR_TRADES",
-    //       message: parsedMessageObj,
-    //     });
-    //   });
-    // });
-  } catch (error) {
-    console.error(error);
-    throw new Error(error.message);
-  }
-}
-
 export function removeDuplicateWindow(popupUrl) {
   // chrome.windows.getAll(
   //   { populate: true, windowTypes: ["popup"] },
@@ -2819,18 +2242,6 @@ export function removeDuplicateWindow(popupUrl) {
   //     }
   //   }
   // );
-}
-
-export async function setChatHeads(data) {
-  const wallet = await getSaveWallet();
-  const address = wallet.address0;
-  return await new Promise((resolve, reject) => {
-    storeData(`chatheads-${address}`, data)
-      .then(() => resolve(true))
-      .catch((error) => {
-        reject(new Error(error.message || 'Error saving data'));
-      });
-  });
 }
 
 export async function checkLocalFunc() {
@@ -2891,18 +2302,6 @@ export async function saveTempPublish({ data, key }) {
   return await new Promise((resolve, reject) => {
     storeData(`tempPublish-${address}`, newTemp)
       .then(() => resolve(newTemp[key]))
-      .catch((error) => {
-        reject(new Error(error.message || 'Error saving data'));
-      });
-  });
-}
-
-async function setChatHeadsDirect(data) {
-  const wallet = await getSaveWallet();
-  const address = wallet.address0;
-  return await new Promise((resolve, reject) => {
-    storeData(`chatheads-direct-${address}`, data)
-      .then(() => resolve(true))
       .catch((error) => {
         reject(new Error(error.message || 'Error saving data'));
       });
@@ -3083,6 +2482,45 @@ export async function addTimestampEnterChat({ groupId, timestamp }) {
   });
 }
 
+/** Marks every listed member group chat read (single read/write per store — avoids parallel races). */
+export async function markAllMemberGroupsRead(groupIds) {
+  if (!Array.isArray(groupIds) || groupIds.length === 0) {
+    return true;
+  }
+  const now = Date.now();
+  const wallet = await getSaveWallet();
+  const address = wallet.address0;
+  const enterData = (await getTimestampEnterChat()) || {};
+  const announcementData = (await getTimestampGroupAnnouncement()) || {};
+
+  for (const groupId of groupIds) {
+    if (groupId == null || groupId === '') continue;
+    enterData[groupId] = now;
+    announcementData[groupId] = {
+      notification: now,
+      seentimestamp: true,
+    };
+  }
+
+  await new Promise((resolve, reject) => {
+    storeData(`enter-chat-timestamp-${address}`, enterData)
+      .then(() => resolve(true))
+      .catch((error) => {
+        reject(new Error(error.message || 'Error saving data'));
+      });
+  });
+
+  await new Promise((resolve, reject) => {
+    storeData(`group-announcement-${address}`, announcementData)
+      .then(() => resolve(true))
+      .catch((error) => {
+        reject(new Error(error.message || 'Error saving data'));
+      });
+  });
+
+  return true;
+}
+
 export async function addTimestampMention({ groupId, timestamp }) {
   const wallet = await getSaveWallet();
   const address = wallet.address0;
@@ -3114,35 +2552,9 @@ export async function notifyAdminRegenerateSecretKey({
   return true;
 }
 
-async function getChatHeads() {
-  const wallet = await getSaveWallet();
-  const address = wallet.address0;
-  const key = `chatheads-${address}`;
-  const res = await getData<any>(key).catch(() => null);
-  if (res) {
-    const parsedData = res;
-    return parsedData;
-  } else {
-    throw new Error('No Chatheads saved');
-  }
-}
-
-async function getChatHeadsDirect() {
-  const wallet = await getSaveWallet();
-  const address = wallet.address0;
-  const key = `chatheads-direct-${address}`;
-  const res = await getData<any>(key).catch(() => null);
-  if (res) {
-    const parsedData = res;
-    return parsedData;
-  } else {
-    throw new Error('No Chatheads saved');
-  }
-}
-
 function setupMessageListener() {
   window.addEventListener('message', async (event) => {
-    if (event.origin !== window.location.origin) {
+    if (event.origin !== window.location.origin || event.source !== window) {
       return;
     }
     const request = event.data;
@@ -3164,6 +2576,12 @@ function setupMessageListener() {
         break;
       case 'validApi':
         validApiCase(request, event);
+        break;
+      case 'validateGroupMembers':
+        validateGroupMembersCase(request, event);
+        break;
+      case 'validateGroupAdmins':
+        validateGroupAdminsCase(request, event);
         break;
       case 'name':
         nameCase(request, event);
@@ -3228,6 +2646,9 @@ function setupMessageListener() {
       case 'registerName':
         registerNameCase(request, event);
         break;
+      case 'updateName':
+        updateNameCase(request, event);
+        break;
       case 'createPoll':
         createPollCase(request, event);
         break;
@@ -3242,6 +2663,9 @@ function setupMessageListener() {
         break;
       case 'addTimestampEnterChat':
         addTimestampEnterChatCase(request, event);
+        break;
+      case 'markAllMemberGroupsRead':
+        markAllMemberGroupsReadCase(request, event);
         break;
       case 'setApiKey':
         setApiKeyCase(request, event);
@@ -3345,6 +2769,30 @@ function setupMessageListener() {
       case 'getRewardSharePrivateKey':
         getRewardSharePrivateKeyCase(request, event);
         break;
+      case 'signPresenceMessage':
+        signPresenceMessageCase(request, event);
+        break;
+      case 'signReticulumChatEvent':
+        signReticulumChatEventCase(request, event);
+        break;
+      case 'getRelayGroupHints':
+        getRelayGroupHintsCase(request, event);
+        break;
+      case 'decryptBoxWithMyKey':
+        decryptBoxWithMyKeyCase(request, event);
+        break;
+      case 'encryptSupportMessage':
+        encryptSupportMessageCase(request, event);
+        break;
+      case 'decryptSupportMessage':
+        decryptSupportMessageCase(request, event);
+        break;
+      case 'encryptSupportAttachment':
+        encryptSupportAttachmentCase(request, event);
+        break;
+      case 'decryptSupportAttachment':
+        decryptSupportAttachmentCase(request, event);
+        break;
       case 'removeRewardShare':
         removeRewardShareCase(request, event);
         break;
@@ -3368,10 +2816,6 @@ function setupMessageListener() {
               if (notificationCheckInterval) {
                 clearInterval(notificationCheckInterval);
                 notificationCheckInterval = null;
-              }
-              if (paymentsCheckInterval) {
-                clearInterval(paymentsCheckInterval);
-                paymentsCheckInterval = null;
               }
               groupSecretkeys = {};
               const wallet = await getSaveWallet();
@@ -3566,82 +3010,54 @@ export const checkNewMessages = async () => {
   }
 };
 
-export const checkPaymentsForNotifications = async (address) => {
+export const fireOsNotificationPayment = async (
+  notificationPayload,
+  title,
+  messageBody,
+  icon,
+  qortalLink,
+  internalPayload
+) => {
   try {
     const isDisableNotifications =
       (await getUserSettings({ key: 'disable-push-notifications' })) || false;
     if (isDisableNotifications) return;
-    let latestPayment = null;
-    const savedtimestamp = await getTimestampLatestPayment();
 
-    const url = await createEndpoint(
-      `/transactions/search?txType=PAYMENT&address=${address}&confirmationStatus=CONFIRMED&limit=5&reverse=true`
+    if (
+      notificationPayload?.event === 'RESOURCE_PUBLISHED' &&
+      notificationPayload?.appName
+    ) {
+      const osPushDisabled = await getNotificationOsPushDisabled(
+        notificationPayload.appName
+      );
+      if (osPushDisabled) return;
+    }
+
+    const notificationId = encodeURIComponent(
+      'general_notification_' + Date.now() + '_type=general-notification'
     );
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+    generalNotificationPayloadById.set(
+      notificationId,
+      internalPayload ||
+        (qortalLink ? { link: qortalLink } : { openWallets: true })
+    );
+
+    const notification = new window.Notification(title, {
+      body: messageBody,
+      icon,
+      data: { id: notificationId },
     });
 
-    const responseData = await response.json();
+    notification.onclick = () => {
+      handleNotificationClick(notificationId);
+      notification.close();
+    };
 
-    const latestTx = responseData.filter(
-      (tx) => tx?.creatorAddress !== address && tx?.recipient === address
-    )[0];
-    if (!latestTx) {
-      return; // continue to the next group
-    }
-    if (
-      checkDifference(latestTx.timestamp) &&
-      (!savedtimestamp || latestTx.timestamp > savedtimestamp)
-    ) {
-      if (latestTx.timestamp) {
-        latestPayment = latestTx;
-        await addTimestampLatestPayment(latestTx.timestamp);
-      }
-
-      // save new timestamp
-    }
-
-    if (latestPayment) {
-      // Create a unique notification ID with type and group announcement details
-      const notificationId = encodeURIComponent(
-        'payment_notification_' + Date.now() + '_type=payment-announcement'
-      );
-
-      const title = 'New payment!';
-      const body = `You have received a new payment of ${latestPayment?.amount} QORT`;
-
-      // Create and show the notification
-      const notification = new window.Notification(title, {
-        body,
-        icon: window.location.origin + '/qortal192.png',
-        data: { id: notificationId },
-      });
-
-      // Handle notification click with specific actions based on `notificationId`
-      notification.onclick = () => {
-        handleNotificationClick(notificationId);
-        notification.close(); // Clean up the notification on click
-      };
-
-      // Automatically close the notification after 5 seconds if it’s not clicked
-      setTimeout(() => {
-        notification.close();
-      }, 10000); // Close after 5 seconds
-
-      const targetOrigin = window.location.origin;
-
-      window.postMessage(
-        {
-          action: 'SET_PAYMENT_ANNOUNCEMENT',
-          payload: latestPayment,
-        },
-        targetOrigin
-      );
-    }
+    setTimeout(() => {
+      generalNotificationPayloadById.delete(notificationId);
+      notification.close();
+    }, 10000);
   } catch (error) {
     console.error(error);
   }
@@ -3814,7 +3230,6 @@ export const checkThreads = async (bringBack) => {
 };
 
 let notificationCheckInterval;
-let paymentsCheckInterval;
 
 const createNotificationCheck = () => {
   // Check if an interval already exists before creating it
@@ -3833,21 +3248,6 @@ const createNotificationCheck = () => {
         console.error('Error checking notifications:', error);
       }
     }, TIME_MINUTES_10_IN_MILLISECONDS);
-  }
-
-  if (!paymentsCheckInterval) {
-    paymentsCheckInterval = setInterval(async () => {
-      try {
-        // This would replace the Chrome alarm callback
-        const wallet = await getSaveWallet();
-        const address = wallet?.address0;
-        if (!address) return;
-
-        checkPaymentsForNotifications(address);
-      } catch (error) {
-        console.error('Error checking payments:', error);
-      }
-    }, TIME_MINUTES_3_IN_MILLISECONDS);
   }
 };
 

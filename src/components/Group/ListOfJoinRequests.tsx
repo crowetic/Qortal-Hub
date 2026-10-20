@@ -1,16 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Avatar,
   Box,
   Button,
+  IconButton,
   ListItem,
   ListItemAvatar,
   ListItemButton,
   ListItemText,
   Popover,
+  Tooltip,
   Typography,
   useTheme,
 } from '@mui/material';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import {
   AutoSizer,
   CellMeasurer,
@@ -24,6 +27,7 @@ import { getBaseApiReact } from '../../App';
 import { txListAtom } from '../../atoms/global';
 import { useAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
+import { hasInvisibleCharacters } from '../../utils/hasInvisibleCharacters';
 
 export const getMemberInvites = async (groupNumber) => {
   const response = await fetch(
@@ -34,7 +38,7 @@ export const getMemberInvites = async (groupNumber) => {
 };
 
 const getNames = async (listOfMembers, includeNoNames) => {
-  let members = [];
+  const members = [];
   if (listOfMembers && Array.isArray(listOfMembers)) {
     for (const member of listOfMembers) {
       if (member.joiner) {
@@ -60,6 +64,8 @@ export const ListOfJoinRequests = ({
   setInfoSnack,
   setOpenSnack,
   show,
+  compact = false,
+  onCountChange,
 }) => {
   const [invites, setInvites] = useState([]);
   const [txList, setTxList] = useAtom(txListAtom);
@@ -68,13 +74,7 @@ export const ListOfJoinRequests = ({
   const listRef = useRef(null);
   const [isLoadingAccept, setIsLoadingAccept] = useState(false);
   const theme = useTheme();
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
 
   const getInvites = async (groupId) => {
     try {
@@ -91,6 +91,24 @@ export const ListOfJoinRequests = ({
       getInvites(groupId);
     }
   }, [groupId]);
+
+  const visibleInvites = useMemo(
+    () =>
+      invites.filter(
+        (member) =>
+          !txList?.some(
+            (tx) =>
+              tx?.groupId === groupId &&
+              tx?.qortalAddress === member?.joiner &&
+              tx?.type === 'join-request-accept'
+          )
+      ),
+    [groupId, invites, txList]
+  );
+
+  useEffect(() => {
+    onCountChange?.(visibleInvites.length);
+  }, [onCountChange, visibleInvites.length]);
 
   const handlePopoverOpen = (event, index) => {
     setPopoverAnchor(event.currentTarget);
@@ -134,6 +152,9 @@ export const ListOfJoinRequests = ({
               });
               setOpenSnack(true);
               handlePopoverClose();
+              setInvites((current) =>
+                current.filter((request) => request?.joiner !== address)
+              );
               res(response);
               setTxList((prev) => [
                 {
@@ -183,17 +204,12 @@ export const ListOfJoinRequests = ({
   };
 
   const rowRenderer = ({ index, key, parent, style }) => {
-    const member = invites[index];
-    const findJoinRequestInTxList = txList?.find(
-      (tx) =>
-        tx?.groupId === groupId &&
-        tx?.qortalAddress === member?.joiner &&
-        tx?.type === 'join-request-accept'
-    );
-
-    if (findJoinRequestInTxList) return null;
+    const member = visibleInvites[index];
 
     const displayName = member?.name || member?.joiner || '';
+    const hasUnsafeDisplayName = Boolean(
+      member?.name && hasInvisibleCharacters(member.name)
+    );
     const isSelected = openPopoverIndex === index;
 
     return (
@@ -207,92 +223,165 @@ export const ListOfJoinRequests = ({
         {({ measure }) => (
           <div style={style} onLoad={measure}>
             <ListItem disablePadding>
-              <Popover
-                open={isSelected}
-                anchorEl={popoverAnchor}
-                onClose={handlePopoverClose}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-                transformOrigin={{ vertical: 'top', horizontal: 'center' }}
-                slotProps={{
-                  paper: {
-                    sx: {
-                      mt: 1,
-                      borderRadius: '16px',
-                      overflow: 'hidden',
-                      boxShadow: theme.shadows[8],
-                      border: `1px solid ${theme.palette.divider}`,
-                      minWidth: 280,
-                      maxWidth: 360,
+              {!compact && (
+                <Popover
+                  open={isSelected}
+                  anchorEl={popoverAnchor}
+                  onClose={handlePopoverClose}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'center' }}
+                  slotProps={{
+                    paper: {
+                      sx: {
+                        mt: 1,
+                        borderRadius: '16px',
+                        overflow: 'hidden',
+                        boxShadow: theme.shadows[8],
+                        border: `1px solid ${theme.palette.divider}`,
+                        minWidth: 280,
+                        maxWidth: 360,
+                      },
                     },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      p: 2.5,
+                      bgcolor: theme.palette.background.paper,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}
+                    >
+                      {t('group:message.generic.join_request_from', {
+                        postProcess: 'capitalizeFirstChar',
+                        defaultValue: 'Join request from',
+                      })}
+                    </Typography>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.5,
+                        mb: 2,
+                      }}
+                    >
+                      <Avatar
+                        alt={displayName}
+                        src={
+                          member?.name
+                            ? `${getBaseApiReact()}/arbitrary/THUMBNAIL/${member.name}/qortal_avatar?async=true`
+                            : undefined
+                        }
+                        sx={{ width: 40, height: 40 }}
+                      >
+                        {displayName?.charAt(0)?.toUpperCase() || '?'}
+                      </Avatar>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography
+                          variant="subtitle1"
+                          fontWeight={600}
+                          noWrap
+                          sx={{
+                            ...(hasUnsafeDisplayName
+                              ? {
+                                  textDecorationLine: 'line-through',
+                                  textDecorationThickness: '2px',
+                                  textDecorationColor: theme.palette.error.main,
+                                }
+                              : {}),
+                          }}
+                        >
+                          {displayName}
+                        </Typography>
+                        {member?.joiner && (
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            noWrap
+                            sx={{ display: 'block' }}
+                          >
+                            {member.joiner}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 2 }}
+                    >
+                      {t('group:message.generic.accept_join_request_confirm', {
+                        postProcess: 'capitalizeFirstChar',
+                        defaultValue:
+                          'Accept this request to add them to the group.',
+                      })}
+                    </Typography>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        gap: 1.5,
+                        justifyContent: 'flex-end',
+                      }}
+                    >
+                      <Button
+                        variant="outlined"
+                        onClick={handlePopoverClose}
+                        sx={{
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          borderRadius: '10px',
+                        }}
+                      >
+                        {t('core:action.close', {
+                          postProcess: 'capitalizeFirstChar',
+                        })}
+                      </Button>
+                      <LoadingButton
+                        loading={isLoadingAccept}
+                        loadingPosition="start"
+                        variant="contained"
+                        onClick={() => handleAcceptJoinRequest(member?.joiner)}
+                        sx={{
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          borderRadius: '10px',
+                        }}
+                      >
+                        {t('core:action.accept', {
+                          postProcess: 'capitalizeFirstChar',
+                        })}
+                      </LoadingButton>
+                    </Box>
+                  </Box>
+                </Popover>
+              )}
+
+              <ListItemButton
+                onClick={
+                  compact
+                    ? undefined
+                    : (event) => handlePopoverOpen(event, index)
+                }
+                sx={{
+                  borderRadius: compact ? '6px' : undefined,
+                  minHeight: compact ? 48 : undefined,
+                  px: compact ? 1 : undefined,
+                  py: compact ? 0.5 : undefined,
+                  '& .compact-row-action': {
+                    opacity: 0,
+                    pointerEvents: 'none',
+                    transition: 'opacity 120ms ease',
+                  },
+                  '&:hover .compact-row-action': {
+                    opacity: 1,
+                    pointerEvents: 'auto',
                   },
                 }}
               >
-                <Box
-                  sx={{
-                    p: 2.5,
-                    bgcolor: theme.palette.background.paper,
-                  }}
-                >
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
-                    {t('group:message.generic.join_request_from', {
-                      postProcess: 'capitalizeFirstChar',
-                      defaultValue: 'Join request from',
-                    })}
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                    <Avatar
-                      alt={displayName}
-                      src={
-                        member?.name
-                          ? `${getBaseApiReact()}/arbitrary/THUMBNAIL/${member.name}/qortal_avatar?async=true`
-                          : undefined
-                      }
-                      sx={{ width: 40, height: 40 }}
-                    >
-                      {displayName?.charAt(0)?.toUpperCase() || '?'}
-                    </Avatar>
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="subtitle1" fontWeight={600} noWrap>
-                        {displayName}
-                      </Typography>
-                      {member?.joiner && (
-                        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-                          {member.joiner}
-                        </Typography>
-                      )}
-                    </Box>
-                  </Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    {t('group:message.generic.accept_join_request_confirm', {
-                      postProcess: 'capitalizeFirstChar',
-                      defaultValue: 'Accept this request to add them to the group.',
-                    })}
-                  </Typography>
-                  <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'flex-end' }}>
-                    <Button
-                      variant="outlined"
-                      onClick={handlePopoverClose}
-                      sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '10px' }}
-                    >
-                      {t('core:action.close', { postProcess: 'capitalizeFirstChar' })}
-                    </Button>
-                    <LoadingButton
-                      loading={isLoadingAccept}
-                      loadingPosition="start"
-                      variant="contained"
-                      onClick={() => handleAcceptJoinRequest(member?.joiner)}
-                      sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '10px' }}
-                    >
-                      {t('core:action.accept', { postProcess: 'capitalizeFirstChar' })}
-                    </LoadingButton>
-                  </Box>
-                </Box>
-              </Popover>
-
-              <ListItemButton
-                onClick={(event) => handlePopoverOpen(event, index)}
-              >
-                <ListItemAvatar>
+                <ListItemAvatar sx={{ minWidth: compact ? 40 : undefined }}>
                   <Avatar
                     alt={member?.name}
                     src={
@@ -300,9 +389,56 @@ export const ListOfJoinRequests = ({
                         ? `${getBaseApiReact()}/arbitrary/THUMBNAIL/${member?.name}/qortal_avatar?async=true`
                         : ''
                     }
+                    sx={{
+                      height: compact ? 32 : undefined,
+                      width: compact ? 32 : undefined,
+                    }}
                   />
                 </ListItemAvatar>
-                <ListItemText primary={member?.name || member?.joiner} />
+                <ListItemText
+                  primary={displayName}
+                  primaryTypographyProps={{
+                    sx: {
+                      fontSize: compact ? 13 : undefined,
+                      fontWeight: compact ? 700 : undefined,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      textTransform: compact ? 'capitalize' : undefined,
+                      whiteSpace: 'nowrap',
+                      ...(hasUnsafeDisplayName
+                        ? {
+                            textDecorationLine: 'line-through',
+                            textDecorationThickness: '2px',
+                            textDecorationColor: theme.palette.error.main,
+                          }
+                        : {}),
+                    },
+                  }}
+                />
+                {compact && (
+                  <Tooltip title="Accept Join Request">
+                    <IconButton
+                      className="compact-row-action"
+                      disabled={isLoadingAccept}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleAcceptJoinRequest(member?.joiner);
+                      }}
+                      size="small"
+                      sx={{
+                        color: 'success.main',
+                        flexShrink: 0,
+                        height: 28,
+                        width: 28,
+                        '&:hover': {
+                          backgroundColor: 'rgba(34, 197, 94, 0.12)',
+                        },
+                      }}
+                    >
+                      <CheckRoundedIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
               </ListItemButton>
             </ListItem>
           </div>
@@ -312,16 +448,26 @@ export const ListOfJoinRequests = ({
   };
 
   return (
-    <div>
-      <p>
-        {t('core:list.join_request', { postProcess: 'capitalizeFirstChar' })}
-      </p>
+    <div
+      style={{
+        display: 'flex',
+        flex: 1,
+        flexDirection: 'column',
+        minHeight: 0,
+      }}
+    >
+      {!compact && (
+        <p>
+          {t('core:list.join_request', { postProcess: 'capitalizeFirstChar' })}
+        </p>
+      )}
       <div
         style={{
           display: 'flex',
           flexDirection: 'column',
           flexShrink: 1,
-          height: '500px',
+          height: compact ? '100%' : '500px',
+          minHeight: 0,
           position: 'relative',
           width: '100%',
         }}
@@ -332,10 +478,10 @@ export const ListOfJoinRequests = ({
               ref={listRef}
               width={width}
               height={height}
-              rowCount={invites.length}
-              rowHeight={cache.rowHeight}
+              rowCount={visibleInvites.length}
+              rowHeight={compact ? 48 : cache.rowHeight}
               rowRenderer={rowRenderer}
-              deferredMeasurementCache={cache}
+              deferredMeasurementCache={compact ? undefined : cache}
             />
           )}
         </AutoSizer>

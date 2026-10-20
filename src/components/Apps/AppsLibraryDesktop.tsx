@@ -25,6 +25,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import IconClearInput from '../../assets/svgs/ClearInput.svg';
 import { useAtom } from 'jotai';
 import { appSortAtom } from '../../atoms/appsAtoms';
+import { filterAndSortApps } from '../../atoms/appsAtoms';
 import {
   SortDropdown,
   CategoryFilter,
@@ -40,8 +41,7 @@ import {
   MyAppsTab,
   PrivateTab,
 } from './AppsLibrary';
-import { appHeighOffsetPx } from '../Desktop/CustomTitleBar';
-import { APPS_BOTTOM_NAV_HEIGHT_PX } from './Apps-styles';
+import { AppCardEnhanced } from './AppCard';
 
 const SearchContainer = styled(Box)(({ theme }) => ({
   display: 'flex',
@@ -62,6 +62,8 @@ export const AppsLibraryDesktop = ({
   isShow,
   categories,
   getQapps,
+  externalSearchRequest,
+  contentHeight,
 }) => {
   const [currentTab, setCurrentTab] = useState<AppsLibraryTabValue>('official');
   const [searchValue, setSearchValue] = useState('');
@@ -69,14 +71,11 @@ export const AppsLibraryDesktop = ({
   const [sortOption, setSortOption] = useAtom(appSortAtom);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilterOption>('all');
+  const [scrollParent, setScrollParent] = useState<HTMLDivElement | null>(null);
   const theme = useTheme();
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const isSearchActive = searchValue.trim().length > 0;
+  const showLibraryScrollbar = currentTab === 'community' && !isSearchActive;
+  const { t } = useTranslation(['auth', 'core', 'group', 'question']);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -85,11 +84,68 @@ export const AppsLibraryDesktop = ({
     return () => clearTimeout(handler);
   }, [searchValue]);
 
+  useEffect(() => {
+    setSearchValue(externalSearchRequest?.query || '');
+    setDebouncedSearchValue(externalSearchRequest?.query || '');
+  }, [externalSearchRequest?.nonce]);
+
   const handleTabChange = (tab: AppsLibraryTabValue) => {
     setCurrentTab(tab);
   };
 
   const renderTabContent = () => {
+    if (debouncedSearchValue.trim()) {
+      const combinedResults = filterAndSortApps(availableQapps, {
+        sort: sortOption,
+        category: 'all',
+        status: 'all',
+        search: debouncedSearchValue,
+      });
+
+      return (
+        <AppsWidthLimiter>
+          <Box
+            sx={{
+              alignItems: 'center',
+              display: 'flex',
+              justifyContent: 'space-between',
+              width: '100%',
+            }}
+          >
+            <Box
+              sx={{
+                color: theme.palette.text.primary,
+                fontSize: '20px',
+                fontWeight: 600,
+              }}
+            >
+              {t('core:action.search_apps', {
+                postProcess: 'capitalizeFirstChar',
+              })}{' '}
+              ({combinedResults.length})
+            </Box>
+          </Box>
+
+          <Box
+            sx={{
+              display: 'grid',
+              gap: '16px',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+              width: '100%',
+            }}
+          >
+            {combinedResults.map((app) => (
+              <AppCardEnhanced
+                key={`${app?.service}-${app?.name}`}
+                app={app}
+                myName={myName}
+              />
+            ))}
+          </Box>
+        </AppsWidthLimiter>
+      );
+    }
+
     switch (currentTab) {
       case 'official':
         return (
@@ -108,6 +164,7 @@ export const AppsLibraryDesktop = ({
             sortValue={sortOption}
             categoryValue={categoryFilter}
             statusValue={statusFilter}
+            scrollParent={scrollParent}
           />
         );
       case 'categories':
@@ -146,7 +203,7 @@ export const AppsLibraryDesktop = ({
       sx={{
         display: !isShow && 'none',
         padding: '0px',
-        height: `calc(100vh - ${appHeighOffsetPx} )`,
+        height: contentHeight || '100%',
         overflow: 'hidden',
         paddingTop: '30px',
       }}
@@ -218,7 +275,11 @@ export const AppsLibraryDesktop = ({
               width: '100%',
             }}
           >
-            <AppsTabs currentTab={currentTab} onTabChange={handleTabChange} />
+            <AppsTabs
+              currentTab={currentTab}
+              isSearchActive={isSearchActive}
+              onTabChange={handleTabChange}
+            />
 
             <Box
               sx={{
@@ -256,9 +317,12 @@ export const AppsLibraryDesktop = ({
                     >
                       <IconButton
                         onClick={() => getQapps()}
-                        aria-label={t('core:action.refetch_apps_websites_list', {
-                          postProcess: 'capitalizeFirstChar',
-                        })}
+                        aria-label={t(
+                          'core:action.refetch_apps_websites_list',
+                          {
+                            postProcess: 'capitalizeFirstChar',
+                          }
+                        )}
                         sx={{ color: theme.palette.text.secondary }}
                       >
                         <RefreshIcon />
@@ -276,7 +340,10 @@ export const AppsLibraryDesktop = ({
                     onChange={setCategoryFilter}
                     categories={categories}
                   />
-                  <StatusFilter value={statusFilter} onChange={setStatusFilter} />
+                  <StatusFilter
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                  />
                 </>
               )}
             </Box>
@@ -296,6 +363,7 @@ export const AppsLibraryDesktop = ({
         }}
       >
         <AppsDesktopLibraryBody
+          ref={setScrollParent}
           sx={{
             alignItems: 'center',
             flex: 1,
@@ -303,10 +371,10 @@ export const AppsLibraryDesktop = ({
             minHeight: 0,
             msOverflowStyle: 'none',
             overflow: 'auto',
-            scrollbarWidth: 'none',
+            scrollbarWidth: showLibraryScrollbar ? 'auto' : 'none',
             width: '90%',
             '&::-webkit-scrollbar': {
-              display: 'none',
+              display: showLibraryScrollbar ? 'initial' : 'none',
             },
           }}
         >

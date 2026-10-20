@@ -1,242 +1,753 @@
-import { Box, ButtonBase, useTheme } from '@mui/material';
+import {
+  alpha,
+  Box,
+  ButtonBase,
+  Divider,
+  Typography,
+  useTheme,
+} from '@mui/material';
+import { useAtomValue, useSetAtom } from 'jotai';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
+import { useTranslation } from 'react-i18next';
 import { HomeIcon } from '../../assets/Icons/HomeIcon';
-import { Save } from '../Save/Save';
-import { IconWrapper } from './DesktopFooter';
+import { AppsIcon } from '../../assets/Icons/AppsIcon';
+import { MessagingIconFilled } from '../../assets/Icons/MessagingIconFilled';
+import qortalLogoOfficial from '../../assets/sidebar/qortal-logo-official.webp';
 import {
   enabledDevModeAtom,
   hasUnreadGroupsAtom,
   isNewTabWindowAtom,
+  supportChatOpenAtom,
 } from '../../atoms/global';
-import { useAtom, useAtomValue } from 'jotai';
-import { AppsIcon } from '../../assets/Icons/AppsIcon';
-import ThemeSelector from '../Theme/ThemeSelector';
+import { keyframes } from '@mui/material/styles';
+import {
+  executeEvent,
+  subscribeToEvent,
+  unsubscribeFromEvent,
+} from '../../utils/events';
+import { openQChatTab, QCHAT_INTERNAL_TAB_ID } from '../../utils/openQChatTab';
 import { CoreSyncStatus } from '../CoreSyncStatus';
 import LanguageSelector from '../Language/LanguageSelector';
-import { MessagingIconFilled } from '../../assets/Icons/MessagingIconFilled';
-import { useTranslation } from 'react-i18next';
-import { AppsNavBarDesktop } from '../Apps/AppsNavBarDesktop';
-import { AppsDevModeNavBar } from '../Apps/AppsDevModeNavBar';
-import { executeEvent } from '../../utils/events';
-import { appHeighOffsetPx } from './CustomTitleBar';
+import ThemeSelector from '../Theme/ThemeSelector';
+
+type DesktopSideBarProps = {
+  desktopViewMode: string;
+  goToHome: any;
+  hasUnreadDirects: any;
+  isApps: boolean;
+  setAppsModeDev: Dispatch<SetStateAction<string>>;
+  setDesktopViewMode: (mode: string) => void;
+  isDirects?: any;
+  isGroups?: any;
+  lastQappViewMode?: any;
+  mode?: any;
+  setDesktopSideView?: any;
+  setMode?: any;
+  toggleSideViewDirects?: any;
+  toggleSideViewGroups?: any;
+};
+
+const SIDEBAR_WIDTH_PX = 72;
+const EDGE_SENSOR_WIDTH_PX = 8;
+const EDGE_SENSOR_HEIGHT_PX = 124;
+const TRIGGER_WIDTH_PX = 10;
+const TRIGGER_HEIGHT_PX = 96;
+const ITEM_WIDTH_PX = 56;
+const ITEM_MIN_HEIGHT_PX = 58;
+const ICON_WRAP_SIZE_PX = 40;
+const ICON_SIZE_PX = 24;
+const ITEM_GAP_PX = 6;
+const ITEM_PADDING_Y = 1;
+const OVERLAY_TRANSITION = '200ms cubic-bezier(0.2, 0, 0, 1)';
+const SIDEBAR_OPEN_DELAY_MS = 0;
+const SIDEBAR_CLOSE_DELAY_MS = 140;
+const SIDEBAR_NUDGE_POSITION_KEY = 'qortal-hub-sidebar-nudge-top-v1';
+
+export const clampSidebarNudgeTop = (
+  value: number,
+  viewportHeight: number
+) =>
+  Math.max(
+    0,
+    Math.min(
+      Math.max(0, viewportHeight - TRIGGER_HEIGHT_PX),
+      Number.isFinite(value) ? value : 0
+    )
+  );
+
+const readSidebarNudgeTop = () => {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const savedValue = window.localStorage.getItem(
+      SIDEBAR_NUDGE_POSITION_KEY
+    );
+    if (savedValue !== null) {
+      const saved = Number(savedValue);
+      if (Number.isFinite(saved)) {
+        return clampSidebarNudgeTop(saved, window.innerHeight);
+      }
+    }
+  } catch {
+    // The nudge remains movable for this session when storage is unavailable.
+  }
+  return clampSidebarNudgeTop(
+    (window.innerHeight - TRIGGER_HEIGHT_PX) / 2,
+    window.innerHeight
+  );
+};
+
+const persistSidebarNudgeTop = (value: number) => {
+  try {
+    window.localStorage.setItem(
+      SIDEBAR_NUDGE_POSITION_KEY,
+      String(Math.round(value))
+    );
+  } catch {
+    // The current position remains active for this session.
+  }
+};
+
+const pulse = keyframes`
+  0%, 100% {
+    transform: translateY(-50%) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-50%) scale(1.3);
+    opacity: 0.6;
+  }
+`;
+
+const DevModeIcon = ({
+  color = 'currentColor',
+  height = 24,
+  width = 24,
+}: {
+  color?: string;
+  height?: number;
+  width?: number;
+}) => {
+  const dotRadius = 2.3;
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="3.5" r={dotRadius} fill={color} />
+      <circle cx="3.5" cy="12" r={dotRadius} fill={color} />
+      <circle cx="12" cy="12" r={dotRadius} fill={color} />
+      <circle cx="20.5" cy="12" r={dotRadius} fill={color} />
+      <circle cx="12" cy="20.5" r={dotRadius} fill={color} />
+    </svg>
+  );
+};
+
+const SidebarItem = ({
+  active = false,
+  children,
+  isInfo = false,
+  dataTheme,
+  itemClassName,
+  label,
+  onClick,
+}: {
+  active?: boolean;
+  children: React.ReactNode;
+  isInfo?: boolean;
+  dataTheme?: string;
+  itemClassName?: string;
+  label: string;
+  onClick?: () => void;
+}) => {
+  const theme = useTheme();
+  const content = (
+    <>
+      <Box
+        className="sidebarItemIconWrap"
+        sx={{
+          alignItems: 'center',
+          display: 'flex',
+          height: ICON_WRAP_SIZE_PX,
+          justifyContent: 'center',
+          width: ICON_WRAP_SIZE_PX,
+        }}
+      >
+        {children}
+      </Box>
+      <Typography
+        className="sidebarItemLabel"
+        sx={{
+          color: 'inherit',
+          fontSize: '11px',
+          fontWeight: 600,
+          letterSpacing: '0.01em',
+          lineHeight: 1,
+          textAlign: 'center',
+        }}
+      >
+        {label}
+      </Typography>
+    </>
+  );
+
+  const sharedSx = {
+    alignItems: 'center',
+    backgroundColor: active
+      ? alpha(
+          theme.palette.action.selected,
+          theme.palette.mode === 'dark' ? 0.78 : 0.88
+        )
+      : 'transparent',
+    borderRadius: '14px',
+    color: active ? theme.palette.text.primary : theme.palette.text.secondary,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: `${ITEM_GAP_PX}px`,
+    justifyContent: 'flex-start',
+    minHeight: `${ITEM_MIN_HEIGHT_PX}px`,
+    py: ITEM_PADDING_Y,
+    transition:
+      'background-color 180ms ease, color 180ms ease, box-shadow 140ms ease, transform 120ms ease',
+    width: `${ITEM_WIDTH_PX}px`,
+    '& .sidebarItemIconWrap': {
+      transition: 'transform 150ms ease, color 180ms ease, opacity 180ms ease',
+    },
+    '& .sidebarItemLabel': {
+      transition: 'color 180ms ease, opacity 180ms ease',
+    },
+    ...((onClick || isInfo) && {
+      '&:hover': {
+        backgroundColor: theme.palette.action.hover,
+        color: theme.palette.text.primary,
+        boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.border.main, 0.18)}, inset 0 1px 0 ${alpha(theme.palette.common.white, theme.palette.mode === 'dark' ? 0.03 : 0.12)}`,
+        '& .sidebarItemIconWrap': {
+          transform: 'translateY(-1px)',
+        },
+      },
+      '&:active': {
+        transform: 'translateY(0)',
+      },
+    }),
+    '&:focus-visible': {
+      backgroundColor: alpha(
+        theme.palette.action.hover,
+        theme.palette.mode === 'dark' ? 0.72 : 0.82
+      ),
+      boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.border.main, 0.22)}, inset 0 1px 0 ${alpha(theme.palette.common.white, theme.palette.mode === 'dark' ? 0.03 : 0.12)}`,
+      color: theme.palette.text.primary,
+      '& .sidebarItemIconWrap': {
+        transform: 'translateY(-1px)',
+      },
+    },
+    ...(active && {
+      boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.primary.light, 0.14)}, inset 0 1px 0 ${alpha(theme.palette.common.white, theme.palette.mode === 'dark' ? 0.02 : 0.1)}`,
+    }),
+  } as const;
+
+  if (!onClick) {
+    return (
+      <Box className={itemClassName} data-theme={dataTheme} sx={sharedSx}>
+        {content}
+      </Box>
+    );
+  }
+
+  return (
+    <ButtonBase
+      className={itemClassName}
+      data-theme={dataTheme}
+      disableRipple
+      onClick={onClick}
+      sx={sharedSx}
+    >
+      {content}
+    </ButtonBase>
+  );
+};
 
 export const DesktopSideBar = ({
   goToHome,
-  setDesktopSideView,
-  toggleSideViewDirects,
   hasUnreadDirects,
-  isDirects,
-  toggleSideViewGroups,
-  isGroups,
   isApps,
   setDesktopViewMode,
   desktopViewMode,
-  lastQappViewMode,
-  mode,
-  setMode,
-}) => {
-  const [isNewTabWindow] = useAtom(isNewTabWindowAtom);
+  setAppsModeDev,
+}: DesktopSideBarProps) => {
+  const isEnabledDevMode = useAtomValue(enabledDevModeAtom);
+  const setIsNewTabWindow = useSetAtom(isNewTabWindowAtom);
   const hasUnreadGroups = useAtomValue(hasUnreadGroupsAtom);
-  const [isEnabledDevMode, setIsEnabledDevMode] = useAtom(enabledDevModeAtom);
   const theme = useTheme();
-  const { t } = useTranslation([
-    'auth',
-    'core',
-    'group',
-    'question',
-    'tutorial',
-  ]);
+  const { t } = useTranslation(['core']);
+  const [isVisible, setIsVisible] = useState(false);
+  const [selectedAppsTab, setSelectedAppsTab] = useState<any>(null);
+  const [isInfoActive, setIsInfoActive] = useState(false);
+  const [isDraggingNudge, setIsDraggingNudge] = useState(false);
+  const [nudgeTop, setNudgeTop] = useState(readSidebarNudgeTop);
+  const [viewportHeight, setViewportHeight] = useState(() =>
+    typeof window === 'undefined' ? 0 : window.innerHeight
+  );
+  const openTimerRef = useRef<number | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const nudgeTopRef = useRef(nudgeTop);
+  const nudgeDragRef = useRef<{
+    offsetY: number;
+    pointerId: number;
+  } | null>(null);
+  const hasUnreadChat = hasUnreadDirects || hasUnreadGroups;
+  const effectiveUnreadChat = hasUnreadChat;
+  const isQChatActive =
+    desktopViewMode === 'apps' &&
+    selectedAppsTab?.internal === QCHAT_INTERNAL_TAB_ID;
+
+  const unreadAccent = useMemo(
+    () =>
+      theme.palette.mode === 'dark'
+        ? 'rgba(255, 110, 140, 0.9)'
+        : 'rgba(235, 95, 125, 0.92)',
+    [theme.palette.mode]
+  );
+
+  const sidebarSurfaceColor =
+    theme.palette.mode === 'dark'
+      ? 'rgb(36, 39, 45)'
+      : theme.palette.background.paper;
+  const sidebarSurfaceShadow =
+    theme.palette.mode === 'dark'
+      ? '8px 0 18px rgba(0, 0, 0, 0.12)'
+      : '6px 0 14px rgba(0,0,0,0.04)';
+
+  useEffect(() => {
+    const handleTabsToNav = (e: CustomEvent) => {
+      setSelectedAppsTab(e.detail?.data?.selectedTab || null);
+    };
+
+    subscribeToEvent('setTabsToNav', handleTabsToNav);
+    return () => {
+      unsubscribeFromEvent('setTabsToNav', handleTabsToNav);
+    };
+  }, []);
+
+  const emitOverlayState = (nextVisible: boolean) => {
+    executeEvent('sidebarOverlayVisibility', {
+      data: {
+        isVisible: nextVisible,
+        width: nextVisible ? SIDEBAR_WIDTH_PX : 0,
+      },
+    });
+  };
+
+  const clearHoverTimers = () => {
+    if (openTimerRef.current !== null) {
+      window.clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+
+  const showSidebar = () => {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    if (isVisible || openTimerRef.current !== null) return;
+    openTimerRef.current = window.setTimeout(() => {
+      openTimerRef.current = null;
+      setIsVisible((prev) => {
+        if (!prev) {
+          emitOverlayState(true);
+        }
+        return true;
+      });
+    }, SIDEBAR_OPEN_DELAY_MS);
+  };
+
+  const showSidebarImmediate = () => {
+    clearHoverTimers();
+    setIsVisible((prev) => {
+      if (!prev) {
+        emitOverlayState(true);
+      }
+      return true;
+    });
+  };
+
+  const hideSidebar = () => {
+    if (nudgeDragRef.current) return;
+    if (openTimerRef.current !== null) {
+      window.clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      setIsVisible((prev) => {
+        if (prev) {
+          emitOverlayState(false);
+        }
+        return false;
+      });
+    }, SIDEBAR_CLOSE_DELAY_MS);
+  };
+
+  const runSidebarAction = (fn: () => void) => {
+    fn();
+    hideSidebar();
+  };
+
+  useEffect(() => {
+    nudgeTopRef.current = nudgeTop;
+  }, [nudgeTop]);
+
+  useEffect(() => {
+    const onResize = () => {
+      const nextHeight = window.innerHeight;
+      setViewportHeight(nextHeight);
+      setNudgeTop((current) => {
+        const next = clampSidebarNudgeTop(current, nextHeight);
+        nudgeTopRef.current = next;
+        persistSidebarNudgeTop(next);
+        return next;
+      });
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const finishNudgeDrag = (pointerId: number) => {
+    if (nudgeDragRef.current?.pointerId !== pointerId) return;
+    nudgeDragRef.current = null;
+    setIsDraggingNudge(false);
+    persistSidebarNudgeTop(nudgeTopRef.current);
+  };
+
+  useEffect(() => {
+    emitOverlayState(false);
+    return () => {
+      clearHoverTimers();
+      emitOverlayState(false);
+    };
+  }, []);
 
   return (
-    <Box
-      sx={{
-        alignItems: 'center',
-        backgroundColor: theme.palette.background.default,
-        borderRight: `1px solid ${theme.palette.border.subtle}`,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '25px',
-        height: `calc(100vh - ${appHeighOffsetPx})`,
-        width: 'auto', // must adapt to the chosen language
-      }}
-    >
-      <ButtonBase
+    <>
+      <Box
+        onMouseEnter={showSidebar}
         sx={{
-          height: '70px',
-          paddingTop: '23px',
-          width: '70px',
+          position: 'fixed',
+          left: 0,
+          top: `${clampSidebarNudgeTop(
+            nudgeTop - (EDGE_SENSOR_HEIGHT_PX - TRIGGER_HEIGHT_PX) / 2,
+            viewportHeight - EDGE_SENSOR_HEIGHT_PX + TRIGGER_HEIGHT_PX
+          )}px`,
+          height: `${EDGE_SENSOR_HEIGHT_PX}px`,
+          width: `${EDGE_SENSOR_WIDTH_PX}px`,
+          opacity: 0,
+          pointerEvents: isVisible ? 'none' : 'auto',
+          zIndex: 9996,
         }}
-      >
-        <CoreSyncStatus />
-      </ButtonBase>
-
-      <ButtonBase
-        sx={{
-          borderRadius: '8px',
-          height: '60px',
-          width: '60px',
-          ...(desktopViewMode === 'home' && {
-            backgroundColor: theme.palette.action.selected,
-          }),
-          '&:hover': {
-            backgroundColor: theme.palette.action.hover,
-          },
-        }}
-        onClick={() => {
-          goToHome();
-        }}
-      >
-        <HomeIcon
-          height={34}
-          color={
-            desktopViewMode === 'home'
-              ? theme.palette.text.primary
-              : theme.palette.text.secondary
-          }
-        />
-      </ButtonBase>
-
-      <ButtonBase
-        sx={{
-          borderRadius: '8px',
-          height: '60px',
-          width: '60px',
-          ...(isApps && {
-            backgroundColor: theme.palette.action.selected,
-          }),
-          '&:hover': {
-            backgroundColor: theme.palette.action.hover,
-          },
-        }}
-        onClick={() => {
-          isApps
-            ? executeEvent('newTabWindow', {})
-            : setDesktopViewMode('apps');
-        }}
-      >
-        <IconWrapper
-          label={t('core:app_other', { postProcess: 'capitalizeFirstChar' })}
-          disableWidth
-          noBackground
-          selected={isApps}
-        >
-          <AppsIcon
-            color={
-              isApps ? theme.palette.text.primary : theme.palette.text.secondary
-            }
-            height={30}
-          />
-        </IconWrapper>
-      </ButtonBase>
-
-      <ButtonBase
-        sx={{
-          borderRadius: '8px',
-          height: '60px',
-          width: '60px',
-          ...(desktopViewMode === 'chat' && {
-            backgroundColor: theme.palette.action.selected,
-          }),
-          '&:hover': {
-            backgroundColor: theme.palette.action.hover,
-          },
-        }}
-        onClick={() => {
-          setDesktopViewMode('chat');
-        }}
-      >
-        <IconWrapper
-          color={
-            hasUnreadDirects || hasUnreadGroups
-              ? theme.palette.other.unread
-              : desktopViewMode === 'chat'
-                ? theme.palette.text.primary
-                : theme.palette.text.secondary
-          }
-          label={t('core:chat', { postProcess: 'capitalizeFirstChar' })}
-          disableWidth
-          noBackground
-          selected={desktopViewMode === 'chat'}
-        >
-          <MessagingIconFilled
-            height={30}
-            color={
-              hasUnreadDirects || hasUnreadGroups
-                ? theme.palette.other.unread
-                : desktopViewMode === 'chat'
-                  ? theme.palette.text.primary
-                  : theme.palette.text.secondary
-            }
-          />
-        </IconWrapper>
-      </ButtonBase>
-
-      {isEnabledDevMode && (
-        <ButtonBase
-          sx={{
-            borderRadius: '8px',
-            height: '60px',
-            width: '60px',
-            ...(desktopViewMode === 'dev' && {
-              backgroundColor: theme.palette.action.selected,
-            }),
-            '&:hover': {
-              backgroundColor: theme.palette.action.hover,
-            },
-          }}
-          onClick={() => {
-            desktopViewMode === 'dev'
-              ? executeEvent('devModeNewTabWindow', {})
-              : setDesktopViewMode('dev');
-          }}
-        >
-          <IconWrapper
-            label={t('core:dev', { postProcess: 'capitalizeFirstChar' })}
-            disableWidth
-            noBackground
-            selected={desktopViewMode === 'dev'}
-          >
-            <AppsIcon
-              height={30}
-              color={
-                desktopViewMode === 'dev'
-                  ? theme.palette.text.primary
-                  : theme.palette.text.secondary
-              }
-            />
-          </IconWrapper>
-        </ButtonBase>
-      )}
-
-      {lastQappViewMode === 'dev' ? (
-        <AppsDevModeNavBar
-          disableBack={desktopViewMode !== 'dev'}
-          isDev={desktopViewMode === 'dev'}
-        />
-      ) : (
-        <AppsNavBarDesktop
-          disableBack={!isApps || isNewTabWindow}
-          isApps={isApps}
-        />
-      )}
+      />
 
       <Box
         sx={{
-          alignItems: 'flex-start',
-          bottom: '1%',
-          display: 'flex',
-          flexDirection: 'column',
-          position: 'absolute',
-          width: 'auto',
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: `${SIDEBAR_WIDTH_PX}px`,
+          backgroundColor: sidebarSurfaceColor,
+          borderRight: `1px solid ${theme.palette.border.subtle}`,
+          boxShadow: sidebarSurfaceShadow,
+          opacity: isVisible ? 1 : 0,
+          transform: isVisible ? 'translateX(0)' : 'translateX(-100%)',
+          pointerEvents: 'none',
+          transition: `transform ${OVERLAY_TRANSITION}, opacity ${OVERLAY_TRANSITION}, box-shadow 200ms ease`,
+          overflow: isVisible ? 'visible' : 'hidden',
+          zIndex: 9998,
         }}
       >
-        <Box sx={{ alignSelf: 'left' }}>
-          <LanguageSelector />
-        </Box>
+        <Box
+          onMouseEnter={showSidebarImmediate}
+          onMouseLeave={hideSidebar}
+          sx={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: `${SIDEBAR_WIDTH_PX}px`,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'visible',
+            pointerEvents: isVisible ? 'auto' : 'none',
+            '& .sidebarItem:hover .sidebarInfoLogo, & .sidebarItem:focus-visible .sidebarInfoLogo, & .sidebarItem.isOpen .sidebarInfoLogo':
+              {
+                filter: 'grayscale(0) saturate(1) brightness(1) contrast(1)',
+                opacity: 1,
+              },
+          }}
+        >
+          <Box
+            sx={{
+              alignItems: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              px: 1,
+              width: '100%',
+            }}
+          >
+            <Box
+              sx={{
+                alignItems: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0.35,
+                justifyContent: 'center',
+                width: '100%',
+              }}
+            >
+              <Box data-tour="hub-home">
+                <SidebarItem
+                  active={desktopViewMode === 'home'}
+                  label={t('core:home', {
+                    postProcess: 'capitalizeFirstChar',
+                  })}
+                  onClick={() => runSidebarAction(goToHome)}
+                >
+                  <Box
+                    sx={{
+                      alignItems: 'center',
+                      color:
+                        desktopViewMode === 'home'
+                          ? theme.palette.text.primary
+                          : theme.palette.text.secondary,
+                      display: 'flex',
+                      height: `${ICON_WRAP_SIZE_PX}px`,
+                      justifyContent: 'center',
+                      width: `${ICON_WRAP_SIZE_PX}px`,
+                    }}
+                  >
+                    <HomeIcon height={26} width={26} color="currentColor" />
+                  </Box>
+                </SidebarItem>
+              </Box>
 
-        <Box sx={{ alignSelf: 'center' }}>
-          <ThemeSelector />
+              <SidebarItem
+                active={isApps && !isQChatActive}
+                label={t('core:app_other', {
+                  postProcess: 'capitalizeFirstChar',
+                })}
+                onClick={() =>
+                  runSidebarAction(() => {
+                    executeEvent('newTabWindow', {});
+                    setDesktopViewMode('apps');
+                  })
+                }
+              >
+                <AppsIcon height={24} color="currentColor" />
+              </SidebarItem>
+
+              <Box sx={{ position: 'relative' }}>
+                <SidebarItem
+                  active={isQChatActive}
+                  label="Q-Chat"
+                  onClick={() => runSidebarAction(() => openQChatTab())}
+                >
+                  <MessagingIconFilled height={24} color="currentColor" />
+                </SidebarItem>
+
+                {effectiveUnreadChat ? (
+                  <Box
+                    className="qChatUnreadDot"
+                    sx={{
+                      position: 'absolute',
+                      top: 11,
+                      right: 7,
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      background: unreadAccent,
+                      boxShadow: `0 0 0 3px ${alpha(unreadAccent, 0.16)}`,
+                    }}
+                  />
+                ) : null}
+              </Box>
+
+              {isEnabledDevMode ? (
+                <SidebarItem
+                  active={desktopViewMode === 'dev'}
+                  label={t('core:dev_mode', {
+                    postProcess: 'capitalizeFirstChar',
+                  })}
+                  onClick={() =>
+                    runSidebarAction(() => {
+                      setDesktopViewMode('dev');
+                      setAppsModeDev('home');
+                      setIsNewTabWindow(false);
+                    })
+                  }
+                >
+                  <DevModeIcon height={24} width={24} color="currentColor" />
+                </SidebarItem>
+              ) : null}
+            </Box>
+
+            <Divider
+              flexItem
+              sx={{
+                borderColor: alpha(theme.palette.text.primary, 0.1),
+                my: 1.2,
+                opacity: 0.8,
+              }}
+            />
+
+            <Box
+              sx={{
+                alignItems: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0.35,
+                justifyContent: 'center',
+                width: '100%',
+              }}
+            >
+              <Box
+                className="tooltip"
+                data-theme={theme.palette.mode}
+                onMouseEnter={() => setIsInfoActive(true)}
+                onMouseLeave={() => setIsInfoActive(false)}
+                onFocus={() => setIsInfoActive(true)}
+                onBlur={() => setIsInfoActive(false)}
+              >
+                <SidebarItem
+                  dataTheme={theme.palette.mode}
+                  itemClassName={`sidebarItem tooltip${isInfoActive ? ' isOpen' : ''}`}
+                  isInfo
+                  label="Info"
+                >
+                  <CoreSyncStatus
+                    useExternalTooltip
+                    renderIcon={
+                      <img
+                        src={qortalLogoOfficial}
+                        alt="Qortal Info"
+                        className="sidebarInfoLogo"
+                        style={{
+                          width: `${ICON_SIZE_PX}px`,
+                          height: `${ICON_SIZE_PX}px`,
+                          objectFit: 'contain',
+                          filter: isInfoActive
+                            ? 'grayscale(0) saturate(1) brightness(1) contrast(1)'
+                            : 'grayscale(0.82) saturate(0.32) brightness(0.82) contrast(0.9)',
+                          opacity: isInfoActive ? 1 : 0.78,
+                          transform: isInfoActive ? 'scale(1.02)' : 'scale(1)',
+                          transition:
+                            'filter 0.2s ease, opacity 0.2s ease, transform 0.2s ease',
+                        }}
+                      />
+                    }
+                  />
+                </SidebarItem>
+              </Box>
+              <LanguageSelector sidebar />
+              <ThemeSelector sidebar />
+            </Box>
+          </Box>
         </Box>
       </Box>
-    </Box>
+
+      <Box
+        aria-label="Move sidebar handle"
+        onMouseEnter={showSidebarImmediate}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.stopPropagation();
+          nudgeDragRef.current = {
+            offsetY: event.clientY - nudgeTopRef.current,
+            pointerId: event.pointerId,
+          };
+          setIsDraggingNudge(true);
+          event.currentTarget.setPointerCapture(event.pointerId);
+          showSidebarImmediate();
+        }}
+        onPointerMove={(event) => {
+          const drag = nudgeDragRef.current;
+          if (!drag || drag.pointerId !== event.pointerId) return;
+          event.preventDefault();
+          const next = clampSidebarNudgeTop(
+            event.clientY - drag.offsetY,
+            viewportHeight
+          );
+          nudgeTopRef.current = next;
+          setNudgeTop(next);
+        }}
+        onPointerUp={(event) => finishNudgeDrag(event.pointerId)}
+        onPointerCancel={(event) => finishNudgeDrag(event.pointerId)}
+        onLostPointerCapture={(event) => finishNudgeDrag(event.pointerId)}
+        role="separator"
+        sx={{
+          background:
+            theme.palette.mode === 'dark'
+              ? isDraggingNudge
+                ? 'rgba(255, 255, 255, 0.24)'
+                : 'rgba(255, 255, 255, 0.14)'
+              : isDraggingNudge
+                ? 'rgba(17, 24, 39, 0.2)'
+                : 'rgba(17, 24, 39, 0.12)',
+          borderRadius: '0 10px 10px 0',
+          boxShadow:
+            theme.palette.mode === 'dark'
+              ? '0 0 0 1px rgba(255,255,255,0.08)'
+              : '0 0 0 1px rgba(17,24,39,0.08)',
+          cursor: isDraggingNudge ? 'grabbing' : 'grab',
+          height: `${TRIGGER_HEIGHT_PX}px`,
+          left: isVisible ? `${SIDEBAR_WIDTH_PX}px` : 0,
+          position: 'fixed',
+          touchAction: 'none',
+          top: `${nudgeTop}px`,
+          transition: isDraggingNudge
+            ? 'background 120ms ease'
+            : `left ${OVERLAY_TRANSITION}, background 200ms ease, box-shadow 200ms ease`,
+          userSelect: 'none',
+          width: `${TRIGGER_WIDTH_PX}px`,
+          zIndex: 9999,
+          '&::after':
+            effectiveUnreadChat && !isVisible
+              ? {
+                  animation: `${pulse} 1.2s ease-out 2`,
+                  background: unreadAccent,
+                  borderRadius: '50%',
+                  boxShadow: `0 0 0 2px ${alpha(unreadAccent, 0.14)}`,
+                  content: '""',
+                  height: 6,
+                  position: 'absolute',
+                  right: 2,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 6,
+                }
+              : undefined,
+        }}
+      />
+    </>
   );
 };
