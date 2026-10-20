@@ -1,5 +1,12 @@
 # Qortal Hub — agent guide
 
+**Owner branch exception (2026-10-20):** Keep daemon/API and its hosted-browser
+integration on `hub-daemon`. Keep the existing hosted-access implementation on
+`hosted-access`. These are separate, long-lived branches with different runtime
+and deployment requirements. The NuQloud-wide `main` default does not apply to
+this repository. Do not create `main` or move this work onto another branch
+without the owner's explicit instruction.
+
 Desktop/web/mobile client for the Qortal blockchain, plus Reticulum-based
 peer-to-peer chat and voice. GPL-3.0. React 19 + TypeScript + Vite 7 + MUI 7,
 wrapped by Capacitor into an Electron desktop app and an Android app.
@@ -151,10 +158,24 @@ will not have them, since `.claude` is git-ignored.
 
 ## Git workflow
 
-For this NuQloud integration fork, work on and push to `origin/main` by default.
-Create or push another branch only when the user explicitly requests it for the
-task. Upstream `develop`/`master` conventions in `docs/contribution.md` describe
-the upstream project; they do not change this fork's delivery target.
+Choose the branch for the requested Hub variant before editing:
+
+- `hub-daemon`: headless Hub daemon/API, Reticulum integration and its new
+  hosted-browser runtime and packaging.
+- `hosted-access`: the existing hosted-access implementation and its deployment
+  compatibility. Do not merge the daemon implementation into it automatically.
+- `develop` / `master`: upstream development and stable/release history. Do not
+  merge daemon or hosted-access changes here without explicit owner direction.
+
+Commit and push daemon work to `origin/hub-daemon` and existing hosted-access
+work to `origin/hosted-access`. Preserve these branches separately; do not rename,
+collapse, merge or retire them as routine cleanup. Do not create or recreate
+`main` as a delivery target. This repository-specific owner instruction overrides
+ecosystem-wide instructions to start from, create or deliver to `main`.
+
+Check the current branch, tracking remote, outgoing commits and dirty state before
+changing branches. Preserve unfinished work. Use an isolated detached worktree
+when needed rather than moving unrelated changes between Hub variants.
 
 Completed work follows the standing commit-and-push authorization in the NuQloud task delivery section below.
 
@@ -194,12 +215,10 @@ work in NuQloud and its surrounding repositories. This applies to this task and
 future tasks unless the user explicitly requests otherwise. Preserve existing
 project-specific task IDs, independent review and CI rules.
 
-**Default delivery branch: `main`.** Commit and push completed work directly to
-the intended writable remote's `main` unless the user explicitly requests a
-different branch for that task. Do not create or push a separate task, feature,
-fix, agent or Codex branch by default. This owner instruction supersedes older
-local instructions requiring task branches, PR branches or another default branch.
-Independent review and applicable CI checks still run before delivery to `main`.
+**Qortal Hub branch exception:** The Git workflow section above determines the
+delivery branch. The NuQloud-wide `main` default does not apply here. Standing
+commit-and-push authorization applies on the correct existing task branch;
+independent review and applicable CI checks still run before delivery.
 
 - At task start, inspect the repository root, branch, tracking remote and dirty
   state. Identify the canonical source checkout before editing a duplicate,
@@ -216,21 +235,21 @@ Independent review and applicable CI checks still run before delivery to `main`.
   messages such as "updates" or "fix stuff". Explain the problem, resulting
   behavior and meaningful validation in the body when useful. Follow required
   task-ID prefixes and existing commit conventions.
-- Start new work from the verified current `main`. If another branch already
-  contains completed task work, inspect and integrate it into `main` without
-  losing commits or local edits. An isolated detached worktree may protect local
-  work without creating a new branch. If `main` does not exist, establish it from
-  the verified intended source history; never guess between unrelated histories.
-- Push those commits to the intended writable project remote's `main` without
-  asking for routine confirmation, unless the user explicitly requested another
-  branch. Check outgoing commits first so unrelated unpublished history is not
-  pushed accidentally. Never push to an upstream project merely because it is
-  named `origin`. If server protection requires a PR or blocks a direct push,
-  report that concrete blocker; do not silently create a branch or bypass it.
-- After merging a user-authorized task branch, verify its exact tip is reachable
-  from the pushed remote `main` before deleting that remote task branch. Retain
-  local recovery refs and worktrees containing unfinished work. Never delete an
-  unmerged branch, a branch that advanced during cleanup, or an upstream branch.
+- Start new work from the verified current remote tip of the intended existing
+  task branch. Preserve its history and local edits. An isolated detached
+  worktree may protect local work without creating a new branch. A missing
+  `main` is expected here; do not create it or use it as a fallback.
+- Push those commits to the intended writable project remote and matching task
+  branch without asking for routine confirmation. Check outgoing commits first
+  so unrelated unpublished history is not pushed accidentally. Never push to an
+  upstream project merely because it is named `origin`. If server protection
+  requires a PR or blocks a direct push, report that concrete blocker; do not
+  silently create a branch or bypass it.
+- Keep `hub-daemon` and `hosted-access` even after a merge unless the owner
+  explicitly authorizes deleting them. Before any authorized branch deletion,
+  verify its exact tip is preserved on the intended pushed branch and that the
+  branch has not advanced. Retain local recovery refs and worktrees containing
+  unfinished work. Never delete an unmerged or upstream branch.
 - Use normal pushes. Do not force-push, reset/discard work, rewrite shared
   history, bypass hooks or merge protections, or silently change a remote to
   make delivery succeed. Resolve safe routine issues; if authentication,
@@ -238,10 +257,10 @@ Independent review and applicable CI checks still run before delivery to `main`.
   report the exact blocker and safe next command. Never claim a failed push
   succeeded. Do not leave completed task changes uncommitted merely because
   older workflow defaults expected the owner to commit manually.
-- A push is not permission to deploy. Check whether pushing `main` triggers
-  deployment. If it would deploy without authorization for that rollout, report
-  the trigger and retain the local commit; do not choose another branch as a
-  workaround. Do not copy code to servers, patch live files, change live
+- A push is not permission to deploy. Check whether pushing the intended branch
+  triggers deployment. If it would deploy without authorization for that rollout,
+  report the trigger and retain the local commit; do not choose another branch
+  as a workaround. Do not copy code to servers, patch live files, change live
   configuration, run migrations, or restart/reload services without explicit
   authorization for that specific rollout. The owner deploys to `monsta`
   through Git and the existing lifecycle scripts.
