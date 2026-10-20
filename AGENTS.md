@@ -155,7 +155,7 @@ will not have them, since `.claude` is git-ignored.
 release-tagged. Branch as `feature/...` or `fix/...` from `develop`; releases go
 through `release/x.y.z` cut from `master`. Details in `docs/contribution.md`.
 
-Do not commit or push unless asked.
+Completed work follows the standing commit-and-push authorization in the NuQloud task delivery section below.
 
 ## Gotchas
 
@@ -175,3 +175,51 @@ Do not commit or push unless asked.
 `docs/development.md` · `docs/contribution.md` · `docs/reticulum.md` ·
 `docs/group-audio-calls.md` · `docs/i18n_languages.md` ·
 `docs/reticulum-chat-sync-architecture.md` · `docs/qortalland-asset-standard.md`
+
+## NuQloud task delivery
+
+The repository owner gives standing authorization to commit and push completed
+work in NuQloud and its surrounding repositories. This applies to this task and
+future tasks unless the user explicitly requests otherwise. Preserve existing
+project-specific task IDs, branch conventions, independent review and CI rules.
+
+- At task start, inspect the repository root, branch, tracking remote and dirty
+  state. Identify the canonical source checkout before editing a duplicate,
+  installed app or upstream reference. Preserve unrelated local work.
+- Complete the requested implementation and relevant verification. Update
+  documentation, changelogs and versions when the repository requires them.
+  For documentation-only work, report that no runtime behavior changed.
+- Review the diff and stage only files or hunks belonging to this task. Never
+  sweep existing edits, generated assets, credentials or ignored runtime state
+  into a commit. Do not create empty commits. If the same file contains unrelated
+  changes, isolate the task hunks or use a separate worktree.
+- Create focused commits with clear imperative subjects, normally under 72
+  characters. Name the affected component and concrete behavior; avoid generic
+  messages such as "updates" or "fix stuff". Explain the problem, resulting
+  behavior and meaningful validation in the body when useful. Follow required
+  task-ID prefixes and existing commit conventions.
+- Push those commits to the intended writable project remote and branch without
+  asking for routine confirmation. Respect protected branches and established
+  PR workflows; use a task branch when needed. Check outgoing commits first so
+  unrelated unpublished history is not pushed accidentally. Never push to an
+  upstream project merely because it is named `origin`.
+- Use normal pushes. Do not force-push, reset/discard work, rewrite shared
+  history, bypass hooks or merge protections, or silently change a remote to
+  make delivery succeed. Resolve safe routine issues; if authentication,
+  permissions or divergent history blocks pushing, retain the commit and
+  report the exact blocker and safe next command. Never claim a failed push
+  succeeded. Do not leave completed task changes uncommitted merely because
+  older workflow defaults expected the owner to commit manually.
+- A push is not permission to deploy. Check whether pushing a branch triggers
+  deployment and use a non-deploying task branch when the deployment itself is
+  not authorized. Do not copy code to servers, patch live files, change live
+  configuration, run migrations, or restart/reload services without explicit
+  authorization for that specific rollout. The owner deploys to `monsta`
+  through Git and the existing lifecycle scripts.
+- Finish with what changed and why, verification and limitations, commit IDs,
+  remote/branch and push status, and exact rollout steps appropriate to the
+  changed components. Reuse existing automation with the target's actual env
+  file, topology and options. Include readiness checks and a recovery/rollback
+  path when runtime behavior or data changes. If no suitable script exists,
+  give precise manual steps, or add a repeatable, idempotent script when useful.
+  Documentation/rules-only changes require no service restart or deployment.
