@@ -11,9 +11,13 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  validateIceServers,
+  writeHostedDeployment,
+} from './hosted-deployment.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export function options(argv) {
@@ -26,6 +30,7 @@ export function options(argv) {
   };
   const keys = {
     '--origin': 'origin',
+    '--daemon-url': 'daemonUrl',
     '--out': 'out',
     '--daemon-port': 'daemonPort',
     '--api-port': 'apiPort',
@@ -51,6 +56,29 @@ export function options(argv) {
     );
   if (!/^[a-zA-Z0-9.-]+$/.test(origin.hostname))
     throw new Error('Invalid hosted hostname');
+  result.daemonUrl ||= `wss://${origin.hostname}/hub-ws`;
+  const daemon = new URL(result.daemonUrl);
+  if (
+    daemon.protocol !== 'wss:' ||
+    daemon.username ||
+    daemon.password ||
+    daemon.search ||
+    daemon.hash ||
+    daemon.port ||
+    [...result.daemonUrl].some(
+      (char) => char.charCodeAt(0) <= 32 || char.charCodeAt(0) === 127
+    ) ||
+    !/^[a-zA-Z0-9.-]+$/.test(daemon.hostname) ||
+    !/^\/[a-zA-Z0-9/_-]*$/.test(daemon.pathname)
+  )
+    throw new Error(
+      '--daemon-url must be a WSS URL on port 443 with a plain path and no credentials, query or fragment'
+    );
+  result.daemonUrl = daemon.href;
+  if (daemon.hostname === origin.hostname && daemon.pathname === '/')
+    throw new Error(
+      'A combined host needs a separate WebSocket path, such as /hub-ws'
+    );
   const core = new URL(result.coreUrl);
   if (
     !['http:', 'https:'].includes(core.protocol) ||
@@ -93,30 +121,15 @@ function run(args, cwd = root) {
 
 export async function buildHosted(config) {
   // Never remove an existing deployment or follow an output symlink.
-  if (existsSync(config.out))
+  if (lstatSync(config.out, { throwIfNoEntry: false }))
     throw new Error(
       `Output already exists: ${config.out}. Choose a new --out directory.`
     );
-  let iceServers = [];
+  let iceServers = config.iceServers === undefined ? [] : config.iceServers;
   if (config.iceFile) {
     iceServers = JSON.parse(await readFile(config.iceFile, 'utf8'));
-    if (
-      !Array.isArray(iceServers) ||
-      iceServers.length > 16 ||
-      iceServers.some(
-        (entry) =>
-          !entry ||
-          !entry.urls ||
-          (Array.isArray(entry.urls) ? entry.urls : [entry.urls]).some(
-            (url) =>
-              typeof url !== 'string' || !/^(stun|stuns|turn|turns):/.test(url)
-          )
-      )
-    )
-      throw new Error(
-        '--ice-servers must contain a JSON array of RTCIceServer entries'
-      );
   }
+  validateIceServers(iceServers);
   if (!config.skipBuild) {
     run(['run', 'build']);
     const sidecar = spawnSync(
@@ -158,7 +171,7 @@ export async function buildHosted(config) {
       JSON.stringify(
         {
           version: 1,
-          daemonUrl: `wss://${config.hostname}/hub-ws`,
+          daemonUrl: config.daemonUrl,
           iceServers,
         },
         null,
@@ -178,23 +191,10 @@ export async function buildHosted(config) {
       path.join(root, 'daemon/scripts/setup-reticulum.mjs'),
       path.join(temp, 'daemon/scripts/setup-reticulum.mjs')
     );
-    const env = `QORTAL_HUB_BROWSER_ENABLED=1\nQORTAL_HUB_BROWSER_PORT=${config.daemonPort}\nQORTAL_HUB_API_PORT=${config.apiPort}\nQORTAL_HUB_API_ORIGINS=${config.origin}\nQORTAL_HUB_CORE_URL=${config.coreUrl}\n`;
-    await writeFile(path.join(temp, 'daemon/hosted.env'), env, { mode: 0o600 });
-    await writeFile(
-      path.join(temp, 'nginx.conf'),
-      `# Install inside nginx's http context. Adjust root and certificate paths.\nserver {\n  listen 443 ssl;\n  server_name ${config.hostname};\n  ssl_certificate /etc/letsencrypt/live/${config.hostname}/fullchain.pem;\n  ssl_certificate_key /etc/letsencrypt/live/${config.hostname}/privkey.pem;\n  root /srv/qortal-hub/www;\n  index index.html;\n  add_header Cross-Origin-Opener-Policy same-origin always;\n  add_header Cross-Origin-Embedder-Policy credentialless always;\n  add_header X-Content-Type-Options nosniff always;\n  add_header Referrer-Policy no-referrer always;\n  location = /hub-ws {\n    proxy_pass http://127.0.0.1:${config.daemonPort}/realtime;\n    proxy_http_version 1.1;\n    proxy_set_header Upgrade $http_upgrade;\n    proxy_set_header Connection "upgrade";\n    proxy_set_header Host 127.0.0.1:${config.daemonPort};\n    proxy_set_header Origin $http_origin;\n    proxy_read_timeout 90s;\n    proxy_send_timeout 90s;\n    proxy_buffering off;\n    access_log off; # One-use Land transport tickets must not enter access logs.\n  }\n  location = /hub-config.json {\n    add_header Cache-Control "no-store";\n    try_files $uri =404;\n  }\n  location / { try_files $uri $uri/ /index.html; }\n}\n`
-    );
-    await writeFile(
-      path.join(temp, 'qortal-hub-hosted.service'),
-      `[Unit]\nDescription=Qortal Hub hosted real-time daemon\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory=/srv/qortal-hub/daemon\nEnvironmentFile=/srv/qortal-hub/daemon/hosted.env\nExecStart=/usr/bin/env node /srv/qortal-hub/daemon/dist/index.js\nRestart=on-failure\nRestartSec=3\nUMask=0077\nNoNewPrivileges=true\n\n[Install]\nWantedBy=default.target\n`
-    );
-    await writeFile(
-      path.join(temp, 'DEPLOY.txt'),
-      `Qortal Hub hosted access\n\nThis package uses the normal Hub login/wallet in the browser. External Auth is\noptional and is not needed by browser users. Private wallet keys stay in the\nbrowser. The daemon supplies real-time transport and per-wallet storage.\n\n1. Copy this directory to /srv/qortal-hub (or change paths in the templates).\n   Serve only www/ as the web root. Keep daemon/, hosted.env and storage private.\n2. Install Node >=22.12, Python >=3.9, python3-venv and Git. In daemon/ run:\n     npm ci --omit=dev\n     npm run setup:reticulum\n3. Review daemon/hosted.env. Core must be reachable from the daemon. The two\n   daemon ports bind only to loopback. Use different data directories and\n   Reticulum ports if running more than one daemon on the same machine.\n4. Start in the foreground to test:\n     cd /srv/qortal-hub/daemon\n     set -a\n     . ./hosted.env\n     set +a\n     npm start\n   Or install qortal-hub-hosted.service as a user service, adjust Node/PATH, then\n   run systemctl --user enable --now qortal-hub-hosted.service. Use loginctl\n   enable-linger for unattended user services. Do not start both instances.\n5. Adapt nginx.conf to your existing HTTPS server and certificate paths, run\n   nginx -t, then reload nginx. Preserve the Host rewrite, Origin, WebSocket\n   upgrades, no-store runtime config, and cross-origin isolation headers.\n6. Visit ${config.origin}, log in normally, and test between two wallets.\n\n${iceServers.length ? 'The public ICE configuration is included in www/hub-config.json.\n' : 'No ICE servers were specified. Add public STUN / short-lived TURN credentials\nto hub-config.json for WebRTC connections across NATs. Reticulum audio remains\navailable through the daemon. Never put an External Auth app secret here.\n'}\nSee docs/hosted-access.md in the source repository for architecture, feature\ncoverage, testing, scaling and browser constraints. No services were changed\nby the build script. Existing External Auth settings remain independent.\n`
-    );
+    await writeHostedDeployment(temp, { ...config, iceServers });
     await rename(temp, config.out);
     console.log(
-      `Hosted package ready: ${config.out}\nWeb root: ${path.join(config.out, 'www')}\nRead DEPLOY.txt before deployment.`
+      `Hosted package ready: ${config.out}\nFrontend: copy only ${path.join(config.out, 'www')} to the website.\nOn the backend VM, after copying daemon/ and backend/ together:\n  ./backend/install-backend.sh --dry-run\n  sudo ./backend/install-backend.sh\nTLS, CyberPanel and rollback instructions: ${path.join(config.out, 'DEPLOY.md')}`
     );
   } catch (error) {
     await rm(temp, { recursive: true, force: true });
@@ -208,7 +208,7 @@ if (
 ) {
   if (process.argv.includes('--help'))
     console.log(
-      'npm run build:hosted -- --origin https://hub.example.org [--out DIR] [--daemon-port 3193] [--api-port 3192] [--core-url http://127.0.0.1:12391] [--ice-servers FILE] [--skip-build]'
+      'npm run build:hosted -- --origin https://hub.example.org [--daemon-url wss://daemon.example.org/hub-ws] [--out DIR] [--daemon-port 3193] [--api-port 3192] [--core-url http://127.0.0.1:12391] [--ice-servers FILE] [--skip-build]'
     );
   else await buildHosted(options(process.argv.slice(2)));
 }

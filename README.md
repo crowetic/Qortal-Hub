@@ -28,6 +28,10 @@ headless daemon package for real-time features. See the [hosted build and
 deployment instructions](./docs/hosted-access.md). Publishing this branch does
 not update the running hosted sites automatically.
 
+Run `./build-hosted-access.sh` to configure and build the package. It saves the
+frontend/daemon settings and includes explicit backend install, readiness and
+rollback scripts alongside CyberPanel/Nginx configuration instructions.
+
 - [Qortal Hub](https://hub.qortal.link/)
 - [Qortal Go, the mobile version](https://go.qortal.link/)
 

@@ -1,0 +1,9 @@
+{
+  "origin": "https://hub.qortal.link",
+  "daemonUrl": "wss://hub-daemon.qortal.link/hub-ws",
+  "coreUrl": "http://127.0.0.1:12391",
+  "daemonPort": 3193,
+  "apiPort": 3192,
+  "outputRoot": ".artifacts/hosted-access",
+  "iceServers": []
+}

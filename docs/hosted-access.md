@@ -7,101 +7,166 @@ the normal Hub interface. **External Auth is not required for hosted users.**
 The optional External Auth integration remains available for NuQloud and other
 API clients, independently of browser access.
 
-## Build a deployment package
+## Build and configure
 
-Use the `hosted-access` branch. Install Node 22.12+, Git and Go 1.26+ (or Docker for
-the native transport build). From the repository root:
+Use the `hosted-access` branch. Install Node 22.12+/npm, Git and Go 1.26+
+(or working Docker for the native transport build). From the repository root:
 
 ```bash
-npm ci
-npm ci --prefix daemon
-npm run build:hosted -- \
-  --origin https://hub.qortal.link \
-  --core-url http://127.0.0.1:12391 \
-  --out .artifacts/hosted-hub
+./build-hosted-access.sh
 ```
 
-The output directory must not exist. The script refuses to replace an existing
-package or deployment. Set `QORTAL_GO_BINARY=/path/to/go` if Go is not on PATH.
-`--help` lists the options. `--skip-build` packages already built renderer,
-daemon and native transport artifacts; it checks that required artifacts exist.
+The script prompts for the frontend HTTPS origin, public daemon WSS URL and
+Core API reachable from the daemon VM. It saves validated settings to the
+ignored `hosted-access.config.json`, installs locked npm dependencies, builds
+the frontend and matching native/headless backend, and produces a new package
+under `.artifacts/hosted-access/`. Reruns reuse settings and choose a fresh
+output directory. Existing packages are never replaced.
 
-For WebRTC through NAT, optionally supply `--ice-servers /path/to/ice.json`:
+For CyberPanel plus the `ai-devrig-2` daemon VM, the unattended equivalent is:
+
+```bash
+./build-hosted-access.sh --non-interactive \
+  --origin https://hub.qortal.link \
+  --daemon-url wss://hub-daemon.qortal.link/hub-ws \
+  --core-url http://127.0.0.1:12391
+```
+
+The Core URL is relative to the **daemon VM**, so use loopback only when Core
+runs there. The default daemon URL without a flag/config is the frontend host
+with `/hub-ws`; the interactive prompt suggests a separate daemon hostname.
+Both public URLs use TLS on port 443. The private browser and REST listener
+ports default to 3193 and 3192 and can be changed independently.
+
+Alternatively copy `hosted-access.config.example.json` to
+`hosted-access.config.json`, edit it and run:
+
+```bash
+./build-hosted-access.sh --non-interactive
+```
+
+`--config FILE` selects another JSON file. Settings are parsed as data, never
+sourced as shell code. `--out DIR` chooses an exact new package directory for
+this invocation. `--skip-deps` reuses installed npm dependencies; `--skip-build`
+packages existing frontend/backend/native builds and also skips dependency
+installation. Set `QORTAL_GO_BINARY=/path/to/go` if Go is not on PATH. Use
+`--help` for all flags. `npm run build:hosted-access -- ...` is an alias.
+
+The lower-level existing `npm run build:hosted -- --origin ... --daemon-url ...`
+remains available for automation that already installs dependencies itself.
+The shell wrapper and both CLI entrypoints only configure/build local files;
+they never SSH to a VM, install system services, reload a web server or deploy.
+
+For WebRTC NAT traversal, set `iceServers` in the saved JSON or pass
+`--ice-servers /path/to/ice.json`, for example:
 
 ```json
 [{ "urls": "stun:your-stun.example.org:3478" }]
 ```
 
-This file becomes **public browser configuration**. Use an appropriate provider
-for STUN and short-lived credentials for TURN. Do not include an External Auth
-application secret, API key, wallet password, seed or private key.
+ICE settings become **public browser configuration**. Use short-lived TURN
+credentials. Do not place External Auth secrets, API keys, wallet passwords,
+seeds or private keys in frontend/build configuration.
 
-The package contains:
+## Package and deployment
 
-| Path                        | Purpose                                                                                              |
-| --------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `www/`                      | Normal production renderer plus `hub-config.json`                                                    |
-| `daemon/`                   | Headless Node executable, workers, Python resources, native transport binary and dependency lockfile |
-| `daemon/hosted.env`         | Browser enablement, allowed origin, listener ports and Core URL                                      |
-| `nginx.conf`                | HTTPS, WebSocket proxy and cross-origin isolation template                                           |
-| `qortal-hub-hosted.service` | Optional systemd user service template                                                               |
-| `DEPLOY.txt`                | Installation and startup instructions                                                                |
+| Path                                | Purpose                                                                                          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `www/`                              | Static browser app, ready-to-use `hub-config.json`, SPA `.htaccess`                              |
+| `daemon/`                           | Matching headless executable/workers, Python resources, native transport and locked dependencies |
+| `daemon/hosted.env`                 | Backend environment template; never put this in the web root                                     |
+| `backend/install-backend.sh`        | Explicit Linux/systemd installation, update, dry-run and rollback command                        |
+| `backend/check-backend.mjs`         | Local HTTP/Ws or public TLS/WSS challenge probe                                                  |
+| `backend/deployment.json`           | Build identity, architecture and runtime-code checksums                                          |
+| `backend/nginx.conf`                | Daemon-host TLS WebSocket virtual host                                                           |
+| `backend/qortal-hub-daemon.service` | Example system service; installer generates actual Node/path settings                            |
+| `frontend/nginx.conf`               | Static frontend or combined-host Nginx example                                                   |
+| `frontend/cyberpanel.txt`           | Exact OpenLiteSpeed Header Operations and cache configuration                                    |
+| `DEPLOY.md` / `DEPLOY.txt`          | Build-specific hostnames, commands, readiness and rollback instructions                          |
 
-Build the native package on the deployment server's OS and architecture. The
-static `www/` files can be served by any suitable HTTPS web server.
-Use the browser and daemon from the same hosted build so their transport
-contracts match. The separate `hub-daemon` branch remains available for
-standalone daemon/API development.
+Build the native package on the backend server's OS/architecture; the backend
+installer requires a matching Linux VM. Static `www/` is platform-independent.
+Keep browser and daemon releases together so their transport contracts match.
+The `hub-daemon` branch remains separate for standalone daemon/API development.
 
-## Deploy
+Serve **only the contents of `www/`** from the CyberPanel document root. It
+already points to the configured remote daemon. Enable rewrite rules and
+`.htaccess` loading; configure response headers through the site's vhost static
+contexts as described in `frontend/cyberpanel.txt`:
 
-1. Copy the package to `/srv/qortal-hub`, or adjust the template paths.
-2. Serve **only `www/`**. Keep `daemon/`, configuration and account data outside
-   the web root. Do not copy a development wallet or data directory into `www/`.
-3. On the daemon host install Node, Git, Python 3.9+ and Python's venv support.
-   In the packaged `daemon/`, run `npm ci --omit=dev` and
-   `npm run setup:reticulum`.
-4. Review `daemon/hosted.env`. The Core URL is used by the daemon to verify
-   group membership and admin rights. The browser retains the normal Hub node
-   selection interface.
-5. Start the daemon with the commands in `DEPLOY.txt`, or install the supplied
-   systemd user service. Start one daemon per data directory.
-6. Adapt the Nginx template to the existing site's certificates and root, check
-   it with `nginx -t`, and reload Nginx.
+- `Cross-Origin-Opener-Policy: same-origin`
+- `Cross-Origin-Embedder-Policy: credentialless`
+- `Cache-Control: no-store` specifically for `/hub-config.json`, including CDN caches
 
-No installation, service restart, web-server reload, commit or deployment is
-performed by the build script. Existing External Auth services are independent.
-If an existing External Auth-managed Hub daemon is already running, enable the
-browser settings on that daemon instead of starting another copy with the same
-data directory or Reticulum ports.
+OpenLiteSpeed supports rewrite rules in `.htaccess`, not Apache header
+directives. Use the vhost Context Header Operations ([custom headers](https://docs.openlitespeed.org/config/headers/),
+[security headers](https://docs.openlitespeed.org/security/headers/)). The generated
+`.htaccess` therefore contains only SPA rewrite rules.
 
-The daemon's optional browser listener is disabled unless
-`QORTAL_HUB_BROWSER_ENABLED=1`. It binds to loopback on port 3193 by default.
-The existing External Auth REST listener remains on port 3192. Customize these
-with `QORTAL_HUB_BROWSER_PORT` and `QORTAL_HUB_API_PORT`; the build script's
-`--daemon-port` and `--api-port` generate matching configuration.
+Copy `daemon/` and `backend/` together to a private directory on `ai-devrig-2`
+(or another chosen VM). Install Node 22.12+/npm, Python 3.9+ with venv/pip, Git
+and systemd. Review `daemon/hosted.env`, then run from the copied package:
 
-Preserve these proxy properties when adapting the template:
+```bash
+./backend/install-backend.sh --dry-run
+sudo ./backend/install-backend.sh
+```
 
-- HTTPS and WebSocket upgrades; a 90-second or longer idle timeout.
-- The original `Origin` header and the exact configured origin allowlist.
-- Rewrite upstream `Host` to the daemon's loopback address and listener port.
-- Forward `/hub-ws` to `/realtime`, including its query string.
-- Disable proxy buffering and access logging for the WebSocket location.
-- Serve `hub-config.json` with `Cache-Control: no-store`.
-- Cross-Origin-Opener-Policy `same-origin` and Cross-Origin-Embedder-Policy
-  `credentialless` for the renderer and its worker assets.
+The installer creates a dedicated service account, prepares locked npm and
+Reticulum Python dependencies in a versioned release, and starts a system
+service. Account identities, history and resources live separately in
+`/var/lib/qortal-hub-daemon`. It preserves existing compatible environment
+settings, including optional External Auth settings. An incompatible existing
+config requires deliberate `--replace-config`; updates are backed up and only
+managed keys change. Unmanaged existing units are refused. If an existing
+External Auth-managed daemon is running, plan its migration explicitly instead
+of launching a second instance with its data or ports.
 
-For a split deployment, serve `www/` from CyberPanel and put the TLS WebSocket
-proxy on the daemon VM (the selected deployment target is `ai-devrig-2`). Set
-`daemonUrl` in the static site's `hub-config.json` to the daemon's public URL,
-for example `wss://hub-daemon.qortal.link/hub-ws`. Keep
-`QORTAL_HUB_API_ORIGINS=https://hub.qortal.link` on the daemon: this is the
-browser website's origin, not the daemon hostname. The generated Nginx template
-assumes a combined host; adapt its hostname/certificates and retain the
-WebSocket location on the daemon VM. Set the static response headers and
-`hub-config.json` cache policy on CyberPanel. This does not require a WebSocket
-proxy on CyberPanel.
+Default service: `qortal-hub-daemon.service`; code: `/srv/qortal-hub/current`;
+environment: `/etc/qortal-hub/hosted.env`. Custom installation/data/env paths,
+account and service name are supported; use installer `--help` and retain the
+same flags for updates/rollback. For multiple daemons, also choose distinct
+browser/REST and Reticulum shared/control ports. Reticulum port overrides can
+be added to the backend environment before installation. Runtime code is
+checksummed; the editable environment template is intentionally not checksummed.
+
+The installer handles backend service setup only. Follow `DEPLOY.md` to configure
+DNS, certificates and the generated backend TLS proxy. The proxy retains the
+browser Origin, rewrites upstream Host to the loopback authority, maps the
+configured public path to `/realtime` with query strings, and disables access
+logging for one-use transport tickets. Keep private listener/control ports off
+the public network. A split deployment needs no WebSocket proxy on CyberPanel.
+For a combined hostname, use one combined frontend Nginx vhost rather than two
+virtual hosts with the same server name.
+
+After TLS is configured:
+
+```bash
+sudo systemctl status qortal-hub-daemon
+node /srv/qortal-hub/current/backend/check-backend.mjs --local
+node /srv/qortal-hub/current/backend/check-backend.mjs
+```
+
+The probes establish HTTP/WebSocket readiness and correct Origin handling.
+They do not prove authenticated peer delivery; complete the two-wallet checks
+in the Test section. Neither External Auth nor a server wallet is required.
+
+## Updates and rollback
+
+Run the next package's installer. It prepares dependencies before switching
+`current`, keeps persistent data, and retains a private prior-release/config
+snapshot. Repeating a completed install does not reinstall or restart a healthy
+unchanged service. A failed new service startup restores the previous managed
+release automatically. To roll back manually:
+
+```bash
+sudo /srv/qortal-hub/current/backend/install-backend.sh --rollback
+```
+
+Pass the same custom path/service options used for installation. Restore the
+matching previous static `www/` deployment as well. A code rollback retains
+account data and does not reverse database/data changes; use your normal data
+backup lifecycle where necessary. The build never triggers this rollout itself.
 
 Current Chromium was used to check the hosted login screen. Credentialless
 Q-App frames and cross-origin-isolated audio depend on browser support. Q-Apps
@@ -181,6 +246,7 @@ native sidecar. WebRTC NAT traversal depends on the configured ICE servers.
 ## Test
 
 ```bash
+npm run test:hosted-build
 npm run build --prefix daemon
 node --test daemon/test/hosted.test.cjs daemon/test/native.test.cjs
 npx vitest run src/hosted/client.test.ts src/background/reticulum-signing-policy.test.ts

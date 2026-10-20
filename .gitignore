@@ -45,6 +45,7 @@ __pycache__/
 
 # Generated screenshots, CPU profiles, and call-test outputs
 /.artifacts/
+/hosted-access.config.json
 /electron/main-pressure-profiles/*.cpuprofile
 # Local dev/preview console captures
 devserver*.err
