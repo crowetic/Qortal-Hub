@@ -82,6 +82,13 @@
     "unhide": "kuva",
     "until_unhidden": "peida kuni uuesti kuvamiseni"
   },
+  "hosted": {
+    "choose_screen": "Vali ekraan või aken",
+    "connecting": "Ühenduse loomine Hubi deemoniga…",
+    "connection_failed": "Reaalajaühendus ebaõnnestus. Ühenda uuesti ja proovi veel kord.",
+    "invalid_config": "Majutatud Hubi seadistust ei saanud laadida.",
+    "reconnecting": "Reaalajaühendus katkes. Ühendan uuesti…"
+  },
   "image_viewer": {
     "actions": "image actions",
     "chat_image": "chat image",

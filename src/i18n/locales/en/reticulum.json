@@ -82,6 +82,13 @@
     "unhide": "unhide",
     "until_unhidden": "hide until unhidden"
   },
+  "hosted": {
+    "choose_screen": "Choose a screen or window",
+    "connecting": "Connecting to the Hub daemon…",
+    "connection_failed": "The real-time connection failed. Please reconnect and try again.",
+    "invalid_config": "The hosted Hub configuration could not be loaded.",
+    "reconnecting": "Real-time connection lost. Reconnecting…"
+  },
   "image_viewer": {
     "actions": "image actions",
     "chat_image": "chat image",

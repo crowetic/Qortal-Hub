@@ -82,6 +82,13 @@
     "unhide": "إظهار",
     "until_unhidden": "إخفاء حتى الإظهار"
   },
+  "hosted": {
+    "choose_screen": "اختر شاشة أو نافذة",
+    "connecting": "جارٍ الاتصال بخادم Hub…",
+    "connection_failed": "فشل الاتصال في الوقت الفعلي. يرجى إعادة الاتصال والمحاولة مرة أخرى.",
+    "invalid_config": "تعذّر تحميل إعدادات Hub المستضاف.",
+    "reconnecting": "انقطع الاتصال في الوقت الفعلي. جارٍ إعادة الاتصال…"
+  },
   "image_viewer": {
     "actions": "image actions",
     "chat_image": "chat image",

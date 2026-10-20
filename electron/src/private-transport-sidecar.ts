@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import { nativeRuntimeEnvironment } from './native-runtime-environment';
 import { EventEmitter } from 'events';
 import path from 'path';
 
@@ -168,17 +168,17 @@ export function getPrivateTransportSidecarPath(): string {
     process.platform === 'win32'
       ? 'qortal-private-transport.exe'
       : 'qortal-private-transport';
-  if (app.isPackaged) {
+  const environment = nativeRuntimeEnvironment();
+  if (environment.packaged()) {
     return path.join(
-      process.resourcesPath,
+      path.dirname(environment.resources()),
       'private-transport',
       platformDirectory(),
       executable
     );
   }
   return path.join(
-    app.getAppPath(),
-    'resources',
+    environment.resources(),
     'private-transport',
     platformDirectory(),
     executable

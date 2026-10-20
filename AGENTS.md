@@ -1,11 +1,12 @@
 # Qortal Hub — agent guide
 
-**Owner branch exception (2026-10-20):** Keep daemon/API and its hosted-browser
-integration on `hub-daemon`. Keep the existing hosted-access implementation on
-`hosted-access`. These are separate, long-lived branches with different runtime
-and deployment requirements. The NuQloud-wide `main` default does not apply to
-this repository. Do not create `main` or move this work onto another branch
-without the owner's explicit instruction.
+**Owner branch exception (2026-10-20):** Keep standalone daemon/API work on
+`hub-daemon`. Publish the hosted browser interface, its matching daemon browser
+transport and deployment packaging on `hosted-access`. These are separate,
+long-lived branches with different runtime and deployment requirements. Integrate
+their shared foundation only when the owner requests it. The NuQloud-wide `main`
+default does not apply to this repository; do not create `main` as a delivery
+target.
 
 Desktop/web/mobile client for the Qortal blockchain, plus Reticulum-based
 peer-to-peer chat and voice. GPL-3.0. React 19 + TypeScript + Vite 7 + MUI 7,
@@ -160,14 +161,16 @@ will not have them, since `.claude` is git-ignored.
 
 Choose the branch for the requested Hub variant before editing:
 
-- `hub-daemon`: headless Hub daemon/API, Reticulum integration and its new
-  hosted-browser runtime and packaging.
-- `hosted-access`: the existing hosted-access implementation and its deployment
-  compatibility. Do not merge the daemon implementation into it automatically.
+- `hub-daemon`: standalone headless Hub daemon/API and Reticulum integration.
+- `hosted-access`: browser interface, authenticated real-time daemon transport,
+  static-site/deployment packaging and hosted-access compatibility. This branch
+  retains the older hosted-access history and includes the matching daemon
+  implementation needed to build the hosted package. Do not merge between these
+  variants automatically; the owner explicitly authorized this hosted update.
 - `develop` / `master`: upstream development and stable/release history. Do not
   merge daemon or hosted-access changes here without explicit owner direction.
 
-Commit and push daemon work to `origin/hub-daemon` and existing hosted-access
+Commit and push standalone daemon work to `origin/hub-daemon` and hosted-access
 work to `origin/hosted-access`. Preserve these branches separately; do not rename,
 collapse, merge or retire them as routine cleanup. Do not create or recreate
 `main` as a delivery target. This repository-specific owner instruction overrides

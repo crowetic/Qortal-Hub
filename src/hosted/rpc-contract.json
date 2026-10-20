@@ -1,0 +1,447 @@
+{
+  "reticulumChat:isEnabled": {
+    "params": [],
+    "method": null
+  },
+  "reticulumChat:getReadinessStatus": {
+    "params": [],
+    "method": null
+  },
+  "reticulumChat:setLocalGroupMemberships": {
+    "params": ["groupIds"],
+    "method": "setLocalGroupMemberships"
+  },
+  "reticulumChat:setPublicGroupDirectory": {
+    "params": ["groupIds"],
+    "method": "setPublicGroupDirectory"
+  },
+  "reticulumChat:getPublicGroupActivity": {
+    "params": [],
+    "method": "getPublicGroupActivitySummaries"
+  },
+  "reticulumChat:getPublicGroupActivitySnapshot": {
+    "params": [],
+    "method": "getPublicGroupActivitySnapshot"
+  },
+  "reticulumChat:setLocalDmAddresses": {
+    "params": ["addresses"],
+    "method": "setLocalDmAddresses"
+  },
+  "reticulumChat:clearLocalAccountState": {
+    "params": [],
+    "method": "clearLocalAccountState"
+  },
+  "reticulumChat:getSilence": {
+    "params": ["ownerAddress", "targetAddress", "scopeType", "groupId"],
+    "method": "getSilence"
+  },
+  "reticulumChat:listSilences": {
+    "params": ["ownerAddress", "scopeType", "groupId"],
+    "method": "listSilences"
+  },
+  "reticulumChat:setSilence": {
+    "params": [
+      "ownerAddress",
+      "targetAddress",
+      "scopeType",
+      "durationMs",
+      "groupId"
+    ],
+    "method": "setSilence"
+  },
+  "reticulumChat:clearSilence": {
+    "params": ["ownerAddress", "targetAddress", "scopeType", "groupId"],
+    "method": "clearSilence"
+  },
+  "reticulumChat:setActiveDirectChat": {
+    "params": ["localAddress", "peerAddress", "active"],
+    "method": "clearActiveDirectChats"
+  },
+  "reticulumChat:publishDirectEvent": {
+    "params": ["event"],
+    "method": "publishDirectEvent"
+  },
+  "reticulumChat:getDirectAuthorStreamId": {
+    "params": ["authorAddress"],
+    "method": "getDirectAuthorStreamId"
+  },
+  "reticulumChat:getDirectExpiryPreference": {
+    "params": ["ownerAddress", "peerAddress"],
+    "method": "getDirectExpiryPreference"
+  },
+  "reticulumChat:setDirectExpiryPreference": {
+    "params": ["ownerAddress", "peerAddress", "durationMs"],
+    "method": "setDirectExpiryPreference"
+  },
+  "reticulumChat:getCalendarEvents": {
+    "params": ["groupId", "rangeStart", "rangeEnd"],
+    "method": "getCalendarEvents"
+  },
+  "reticulumChat:getCalendarEvent": {
+    "params": ["groupId", "eventId", "preferredOccurrenceStart"],
+    "method": "getCalendarEvent"
+  },
+  "reticulumChat:createCalendarEvent": {
+    "params": ["groupId", "input", "eventId"],
+    "method": "createCalendarEvent"
+  },
+  "reticulumChat:updateCalendarEvent": {
+    "params": ["groupId", "eventId", "input"],
+    "method": "updateCalendarEvent"
+  },
+  "reticulumChat:deleteCalendarEvent": {
+    "params": ["groupId", "eventId"],
+    "method": "deleteCalendarEvent"
+  },
+  "reticulumChat:getCalendarReminder": {
+    "params": ["ownerAddress", "groupId", "eventId"],
+    "method": "getCalendarReminder"
+  },
+  "reticulumChat:setCalendarReminder": {
+    "params": ["ownerAddress", "groupId", "eventId", "offsetMs"],
+    "method": "setCalendarReminder"
+  },
+  "reticulumChat:sendDirectTyping": {
+    "params": ["localAddress", "peerAddress", "active"],
+    "method": "sendDirectTyping"
+  },
+  "reticulumChat:getDirectHistory": {
+    "params": ["myAddress", "peerAddress", "limit"],
+    "method": "getDirectHistory"
+  },
+  "reticulumChat:getDirectSummaries": {
+    "params": ["myAddress", "peerAddress"],
+    "method": "getDirectSummaries"
+  },
+  "reticulumChat:getDirectCallHistory": {
+    "params": ["ownerAddress", "peerAddress", "limit", "unreadOnly"],
+    "method": "getDirectCallHistory"
+  },
+  "reticulumChat:markDirectRead": {
+    "params": ["myAddress", "peerAddress", "upToTimestamp"],
+    "method": "markDirectRead"
+  },
+  "reticulumChat:subscribeGroup": {
+    "params": ["groupId"],
+    "method": "subscribeGroup"
+  },
+  "reticulumChat:subscribeChannel": {
+    "params": ["groupId", "channelId"],
+    "method": "subscribeChannel"
+  },
+  "reticulumChat:unsubscribeChannel": {
+    "params": ["groupId", "channelId"],
+    "method": "unsubscribeChannel"
+  },
+  "reticulumChat:unsubscribeGroup": {
+    "params": ["groupId"],
+    "method": "unsubscribeGroup"
+  },
+  "reticulumChat:publishEvent": {
+    "params": ["event"],
+    "method": "publishEvent"
+  },
+  "reticulumChat:reserveAuthorSequence": {
+    "params": ["groupId", "authorAddress"],
+    "method": "reserveAuthorSequence"
+  },
+  "reticulumChat:releaseAuthorSequence": {
+    "params": ["groupId", "authorAddress", "authorStreamId", "authorSeq"],
+    "method": "releaseAuthorSequence"
+  },
+  "reticulumChat:sendTyping": {
+    "params": [
+      "groupId",
+      "channelIdOrAuthorAddress",
+      "authorAddressOrActive",
+      "activeMaybe"
+    ],
+    "method": "sendTyping"
+  },
+  "reticulumChat:sendLandState": {
+    "params": ["groupId", "authorAddress", "state"],
+    "method": "sendLandState"
+  },
+  "reticulumChat:sendLandChat": {
+    "params": ["message"],
+    "method": "sendLandChat"
+  },
+  "reticulumChat:sendLandAction": {
+    "params": ["groupId", "action"],
+    "method": "sendLandAction"
+  },
+  "reticulumChat:sendLandCall": {
+    "params": ["groupId", "call"],
+    "method": "sendLandCall"
+  },
+  "reticulumChat:requestResource": {
+    "params": ["groupId", "manifest", "eventId"],
+    "method": "requestResource"
+  },
+  "reticulumChat:requestDirectResource": {
+    "params": ["myAddress", "peerAddress", "manifest", "eventId"],
+    "method": "requestDirectResource"
+  },
+  "reticulumChat:cancelResource": {
+    "params": ["fileHash"],
+    "method": "cancelResource"
+  },
+  "reticulumChat:getHistory": {
+    "params": ["groupId", "channelIdOrLimit", "limitMaybe", "optionsMaybe"],
+    "method": "getHistory"
+  },
+  "reticulumChat:getMessageHistory": {
+    "params": ["groupId", "channelIdOrLimit", "limitMaybe", "optionsMaybe"],
+    "method": "getMessageHistory"
+  },
+  "reticulumChat:getMessageHistoryPage": {
+    "params": ["groupId", "channelId", "limit", "options"],
+    "method": "getMessageHistoryPage"
+  },
+  "reticulumChat:getDiscussionIndex": {
+    "params": ["groupId", "channelId"],
+    "method": "getDiscussionIndex"
+  },
+  "reticulumChat:getDiscussionMessages": {
+    "params": ["groupId", "channelId", "eventId"],
+    "method": "getDiscussionMessages"
+  },
+  "reticulumChat:getChannelMetadataHistory": {
+    "params": ["groupId", "limit"],
+    "method": "getChannelMetadataHistory"
+  },
+  "reticulumChat:getChannels": {
+    "params": ["groupId", "includeArchived"],
+    "method": "getChannels"
+  },
+  "reticulumChat:getCategories": {
+    "params": ["groupId"],
+    "method": "getCategories"
+  },
+  "reticulumChat:getChannelMetadataBundle": {
+    "params": ["groupId", "includeArchived"],
+    "method": "getChannelMetadataBundle"
+  },
+  "reticulumChat:applyChannelMetadata": {
+    "params": ["eventId", "payload"],
+    "method": "applyChannelMetadataEvent"
+  },
+  "reticulumChat:getSyncState": {
+    "params": ["groupId"],
+    "method": "getSyncState"
+  },
+  "reticulumChat:getSummaries": {
+    "params": ["myAddress"],
+    "method": "getChatSummaries"
+  },
+  "reticulumChat:search": {
+    "params": ["query", "options"],
+    "method": "searchEvents"
+  },
+  "reticulumChat:getMessageWindowAroundEvent": {
+    "params": ["groupId", "channelId", "eventId", "options"],
+    "method": "getMessageWindowAroundEvent"
+  },
+  "reticulumChat:getMessageWindowPageAroundEvent": {
+    "params": ["groupId", "channelId", "eventId", "options"],
+    "method": "getMessageWindowPageAroundEvent"
+  },
+  "reticulumChat:indexSearchText": {
+    "params": ["eventId", "text"],
+    "method": "indexSearchText"
+  },
+  "reticulumChat:deleteSearchText": {
+    "params": ["eventId"],
+    "method": "deleteSearchText"
+  },
+  "reticulumChat:replaceMentions": {
+    "params": ["eventId", "mentionedAddresses"],
+    "method": "replaceMentionsForEvent"
+  },
+  "reticulumChat:deleteMentions": {
+    "params": ["eventId"],
+    "method": "deleteMentionsForEvent"
+  },
+  "reticulumChat:markRead": {
+    "params": ["groupId", "channelIdOrTimestamp", "upToTimestamp", "myAddress"],
+    "method": "markRead"
+  },
+  "reticulumChat:markGroupsRead": {
+    "params": ["groupIds", "myAddress"],
+    "method": "markGroupsRead"
+  },
+  "reticulumChat:getSubscriptions": {
+    "params": [],
+    "method": "getSubscriptions"
+  },
+  "reticulumChat:updateMentionBadge": {
+    "params": ["mentionCount"],
+    "method": null
+  },
+  "call:initiate": {
+    "params": [
+      "targetAddress",
+      "chatId",
+      "localAddress",
+      "signature",
+      "publicKey",
+      "callId",
+      "timestamp",
+      "cancellationSignature",
+      "cancellationPublicKey",
+      "cancellationTimestamp"
+    ],
+    "method": "initiateCall"
+  },
+  "call:accept": {
+    "params": ["callId", "signature", "publicKey", "timestamp"],
+    "method": "acceptCall"
+  },
+  "call:reject": {
+    "params": [
+      "callId",
+      "reason",
+      "signature",
+      "publicKey",
+      "timestamp",
+      "reasonSignature"
+    ],
+    "method": "rejectCall"
+  },
+  "call:hangup": {
+    "params": ["callId", "signature", "publicKey", "timestamp"],
+    "method": "hangUp"
+  },
+  "call:rtc-signal": {
+    "params": ["input"],
+    "method": "sendRtcSignal"
+  },
+  "call:setLocalAddresses": {
+    "params": ["addresses"],
+    "method": "setLocalAddresses"
+  },
+  "gcall:join": {
+    "params": ["args"],
+    "method": "joinRoom"
+  },
+  "gcall:leave": {
+    "params": [
+      "roomId",
+      "localAddress",
+      "signature",
+      "publicKey",
+      "timestamp",
+      "joinGeneration"
+    ],
+    "method": "leaveRoom"
+  },
+  "gcall:broadcastTopology": {
+    "params": [
+      "roomId",
+      "topology",
+      "signature",
+      "publicKey",
+      "timestamp",
+      "localAuthorityProvisional"
+    ],
+    "method": "broadcastTopology"
+  },
+  "gcall:sendClusterHeartbeat": {
+    "params": ["roomId", "payload", "signature"],
+    "method": "sendClusterHeartbeat"
+  },
+  "gcall:sendRtcSignal": {
+    "params": ["input"],
+    "method": "sendRtcSignal"
+  },
+  "gcall:sendAudio": {
+    "params": ["roomId", "toAddress", "data", "timing"],
+    "method": "sendAudio"
+  },
+  "gcall:sendAudioBatch": {
+    "params": ["roomId", "toAddresses", "data", "timing"],
+    "method": "sendAudioBatch"
+  },
+  "gcall:getAudioDataPlaneSession": {
+    "params": ["roomId", "toAddresses"],
+    "method": "getAudioDataPlaneSession"
+  },
+  "gcall:requestPeerMediaRecovery": {
+    "params": ["roomId", "address", "reason"],
+    "method": "requestPeerMediaRecovery"
+  },
+  "gcall:reportGcallAudioEscalation": {
+    "params": ["opts"],
+    "method": "reportGcallAudioEscalation"
+  },
+  "gcall:getLinkStats": {
+    "params": ["roomId"],
+    "method": "getReticulumAudioLinkStats"
+  },
+  "gcall:sendKey": {
+    "params": [
+      "roomId",
+      "toAddress",
+      "encryptedKey",
+      "fromAddress",
+      "signature",
+      "publicKey",
+      "timestamp",
+      "meta"
+    ],
+    "method": "sendKey"
+  },
+  "gcall:sendKeyRequest": {
+    "params": [
+      "roomId",
+      "toAddress",
+      "fromAddress",
+      "signature",
+      "publicKey",
+      "timestamp",
+      "callSessionId",
+      "mediaSessionGeneration"
+    ],
+    "method": "sendKeyRequest"
+  },
+  "gcall:requestSessionBreak": {
+    "params": ["roomId"],
+    "method": "requestSessionBreak"
+  },
+  "gcall:setLocalAddresses": {
+    "params": ["addresses", "source"],
+    "method": "setLocalAddresses"
+  },
+  "gcall:setQortalGroupReticulumTargets": {
+    "params": ["roomId", "addresses"],
+    "method": "setQortalGroupReticulumTargets"
+  },
+  "gcall:getRoomParticipants": {
+    "params": ["roomId"],
+    "method": "getRoomParticipants"
+  },
+  "gcall:getRoomBootstrapState": {
+    "params": ["roomId"],
+    "method": "getRoomBootstrapState"
+  },
+  "gcall:reportTransportHealth": {
+    "params": ["roomId", "healthyPeerAddresses"],
+    "method": "reportTransportHealth"
+  },
+  "gcall:getPendingKeyMetrics": {
+    "params": [],
+    "method": "getPendingKeyMetrics"
+  },
+  "gcall:proxySignPresenceMessage": {
+    "params": ["payload"],
+    "method": null
+  },
+  "gcall:proxyDecryptBoxWithMyKey": {
+    "params": ["payload"],
+    "method": null
+  },
+  "gcall:setWatchedQortalGroupIds": {
+    "params": ["ids"],
+    "method": "setWatchedQortalGroupIds"
+  }
+}

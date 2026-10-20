@@ -82,6 +82,13 @@
     "unhide": "einblenden",
     "until_unhidden": "ausblenden bis zur wiedereinblendung"
   },
+  "hosted": {
+    "choose_screen": "Bildschirm oder Fenster auswählen",
+    "connecting": "Verbindung zum Hub-Daemon wird hergestellt…",
+    "connection_failed": "Die Echtzeitverbindung ist fehlgeschlagen. Bitte erneut verbinden und versuchen.",
+    "invalid_config": "Die Konfiguration des gehosteten Hub konnte nicht geladen werden.",
+    "reconnecting": "Echtzeitverbindung unterbrochen. Verbindung wird wiederhergestellt…"
+  },
   "image_viewer": {
     "actions": "image actions",
     "chat_image": "chat image",

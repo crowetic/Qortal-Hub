@@ -2399,7 +2399,24 @@ export async function signPresenceMessageCase(request, event) {
   let messageBytes: Uint8Array | null = null;
   try {
     assertAllowedPresenceSigningPayload(request.payload);
+    if (
+      request.payload?.type === 'HUB_BROWSER_SESSION' &&
+      (event.source !== window ||
+        request.payload.origin !== window.location.origin)
+    )
+      throw new Error('invalid_hosted_session_origin');
     resKeyPair = await getKeyPair();
+    if (
+      request.payload?.type === 'HUB_BROWSER_SESSION' &&
+      (request.payload.publicKey !== resKeyPair.publicKey ||
+        request.payload.address !==
+          publicKeyToAddress(
+            (Base58 as { decode(value: string): Uint8Array }).decode(
+              resKeyPair.publicKey
+            )
+          ))
+    )
+      throw new Error('invalid_hosted_session_identity');
     privateKeyBytes = Base58.decode(resKeyPair.privateKey);
 
     // Build canonical signed data — keys sorted alphabetically, then

@@ -12,6 +12,15 @@ const schema = (
 ): SigningSchema => ({ required, optional });
 
 const presenceSchemas: Readonly<Record<string, SigningSchema>> = {
+  HUB_BROWSER_SESSION: schema([
+    'type',
+    'nonce',
+    'origin',
+    'clientId',
+    'address',
+    'publicKey',
+    'timestamp',
+  ]),
   QORTAL_LAND_PROXIMITY_VOICE_SESSION: schema([
     'type',
     'protocolVersion',
@@ -904,6 +913,21 @@ export function assertAllowedPresenceSigningPayload(
     [p2pChatSchema],
     PRESENCE_SIGNING_MAX_BYTES
   );
+  if (payload.type === 'HUB_BROWSER_SESSION') {
+    if (
+      typeof payload.nonce !== 'string' ||
+      typeof payload.clientId !== 'string' ||
+      !/^[a-f0-9]{32}$/.test(payload.clientId) ||
+      !/^[A-Za-z0-9_-]{43}$/.test(payload.nonce) ||
+      typeof payload.origin !== 'string' ||
+      payload.origin.length > 2048 ||
+      new URL(payload.origin).origin !== payload.origin ||
+      !['https:', 'http:'].includes(new URL(payload.origin).protocol) ||
+      !Number.isSafeInteger(payload.timestamp) ||
+      Math.abs(Date.now() - Number(payload.timestamp)) > 30_000
+    )
+      throw new Error('invalid_hosted_session_challenge');
+  }
   if (
     payload.type === 'CALL_REJECT' &&
     'reason' in payload &&

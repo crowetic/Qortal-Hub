@@ -82,6 +82,13 @@
     "unhide": "afficher",
     "until_unhidden": "masquer jusqu'à réaffichage"
   },
+  "hosted": {
+    "choose_screen": "Choisir un écran ou une fenêtre",
+    "connecting": "Connexion au démon Hub…",
+    "connection_failed": "La connexion en temps réel a échoué. Reconnectez-vous et réessayez.",
+    "invalid_config": "Impossible de charger la configuration du Hub hébergé.",
+    "reconnecting": "Connexion en temps réel perdue. Reconnexion…"
+  },
   "image_viewer": {
     "actions": "image actions",
     "chat_image": "chat image",

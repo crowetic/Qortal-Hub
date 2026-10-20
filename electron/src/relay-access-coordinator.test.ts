@@ -5,6 +5,7 @@ import {
   configureRelaySigner,
   setRelayAccount,
   setRelayGroups,
+  createRelayAccountState,
 } from './relay-access-coordinator';
 import { PrivateTransportSidecarError } from './private-transport-sidecar';
 import { RelayTicketWallet } from './relay-ticket-wallet';
@@ -51,6 +52,32 @@ beforeEach(() => {
   }));
   sidecar = new Sidecar();
   coordinator = new RelayAccessCoordinator(sidecar as never, () => 0);
+});
+
+it('keeps daemon relay accounts isolated from each other and desktop logout', () => {
+  const stateA = createRelayAccountState();
+  const stateB = createRelayAccountState();
+  const signA = vi.fn();
+  const signB = vi.fn();
+  configureRelaySigner(signA, undefined, undefined, stateA);
+  configureRelaySigner(signB, undefined, undefined, stateB);
+  setRelayAccount('wallet-A', false, stateA);
+  setRelayAccount('wallet-B', false, stateB);
+  setRelayGroups([716], stateA);
+  setRelayGroups([717], stateB);
+  const clearA = vi.fn();
+  const clearB = vi.fn();
+  stateA.instances.add({ clear: clearA } as never);
+  stateB.instances.add({ clear: clearB } as never);
+  setRelayAccount('', true);
+  expect(stateA.account).toBe('wallet-A');
+  expect(stateB.account).toBe('wallet-B');
+  expect(stateA.signer).toBe(signA);
+  expect(stateB.signer).toBe(signB);
+  setRelayAccount('', true, stateA);
+  expect(clearA).toHaveBeenCalledOnce();
+  expect(clearB).not.toHaveBeenCalled();
+  expect(stateB.groups).toEqual(new Set([717]));
 });
 afterEach(() => {
   coordinator.dispose();

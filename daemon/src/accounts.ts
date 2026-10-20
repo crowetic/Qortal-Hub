@@ -18,6 +18,13 @@ import {
   type PresenceRoute,
 } from '../../electron/src/presence';
 import type { DaemonConfig } from './config';
+import { CallManager } from '../../electron/src/call';
+import { GroupCallManager } from '../../electron/src/group-call';
+
+export type BrowserSigner = (
+  kind: 'presence' | 'chat',
+  fields: Record<string, unknown>
+) => Promise<any>;
 
 async function requestJson(
   url: string,
@@ -158,6 +165,8 @@ export class AccountWorker {
   readonly presence = new PresenceManager();
   readonly resources: ReticulumResourceStore;
   readonly manager: ReticulumChatManager;
+  readonly calls: CallManager;
+  readonly groupCalls: GroupCallManager;
   readonly runtime: HubApiRuntime;
   private timers: NodeJS.Timeout[] = [];
   private unsubscribe: () => void;
@@ -172,7 +181,8 @@ export class AccountWorker {
     readonly config: DaemonConfig,
     readonly walletId: string,
     readonly principal: HubApiPrincipal,
-    public token: string
+    public token: string,
+    private browserSigner?: BrowserSigner
   ) {
     const id = createHash('sha256')
       .update(`${config.api.authUrl}\0${walletId}`)
@@ -239,6 +249,22 @@ export class AccountWorker {
           this.presence.getReticulumVerifiedTransportPeers().length,
       })
     );
+    this.calls = new CallManager(this.presence, this.bridge);
+    this.groupCalls = new GroupCallManager(this.presence, this.bridge);
+    this.calls.setDmCallLinkControlSender((input) =>
+      this.groupCalls.sendDmCallLinkControl(input)
+    );
+    this.calls.on('call:history', (update) => {
+      void this.manager.recordDirectCallHistory(update).catch(() => {});
+    });
+    this.groupCalls.on('gcall:dm-call-control', (control) => {
+      if (control.kind === 'hangup-ack')
+        this.calls.acknowledgeDmCallLinkHangup(control);
+      else
+        void this.calls.handleDmCallLinkHangup(control, (ack) =>
+          this.groupCalls.sendDmCallLinkControl(ack)
+        );
+    });
     this.unsubscribe = this.bridge.subscribe({
       onEnvelope: (envelope, route) => {
         void this.presence.handleEnvelope(envelope, route).catch(() => {});
@@ -265,7 +291,7 @@ export class AccountWorker {
           this.bridge.getLocalDestinationHash() || null
         );
         void this.syncOverlay();
-        if (this.sessionId)
+        if (this.sessionId && !this.browserSigner)
           void this.publishPresence('PRESENCE_ANNOUNCE').catch(() =>
             this.close()
           );
@@ -320,9 +346,16 @@ export class AccountWorker {
     config: DaemonConfig,
     walletId: string,
     principal: HubApiPrincipal,
-    token: string
+    token: string,
+    browserSigner?: BrowserSigner
   ) {
-    const worker = new AccountWorker(config, walletId, principal, token);
+    const worker = new AccountWorker(
+      config,
+      walletId,
+      principal,
+      token,
+      browserSigner
+    );
     try {
       worker.presence.startVerifyPool();
       worker.presence.startCleanup();
@@ -332,14 +365,19 @@ export class AccountWorker {
         throw new HubApiError(503, 'reticulum_identity_unavailable');
       worker.sessionId = `P${Buffer.from(destination, 'hex').toString('base64url')}${randomBytes(10).toString('base64url').slice(0, 13)}`;
       // Prove External Auth can sign before subscribing or accepting traffic.
-      await worker.publishPresence('PRESENCE_ANNOUNCE');
+      if (!browserSigner) await worker.publishPresence('PRESENCE_ANNOUNCE');
       worker.manager.setLocalDmAddresses([principal.address]);
+      worker.calls.setLocalAddresses([principal.address]);
+      worker.groupCalls.setLocalAddresses([principal.address]);
+      worker.calls.start();
+      worker.groupCalls.start();
       await worker.refreshMemberships();
       worker.timers.push(
         setInterval(() => {
-          void worker
-            .publishPresence('PRESENCE_HEARTBEAT')
-            .catch(() => worker.close());
+          if (!browserSigner)
+            void worker
+              .publishPresence('PRESENCE_HEARTBEAT')
+              .catch(() => worker.close());
         }, 25_000)
       );
       worker.timers.push(
@@ -354,6 +392,7 @@ export class AccountWorker {
     }
   }
   private sign(kind: 'presence' | 'chat', fields: Record<string, unknown>) {
+    if (this.browserSigner) return this.browserSigner(kind, fields);
     return requestJson(
       `${this.config.api.authUrl}/hub/session/sign`,
       this.token,
@@ -450,6 +489,12 @@ export class AccountWorker {
             (m) => m.member === this.principal.address
           );
           if (!local) continue;
+          this.groupCalls.setQortalGroupReticulumTargets(
+            `gcall-qortal-${group.groupId}`,
+            members
+              .map((entry) => entry.member)
+              .filter((address) => typeof address === 'string')
+          );
           memberships.push({
             groupId: group.groupId,
             localAddress: this.principal.address,
@@ -459,6 +504,11 @@ export class AccountWorker {
           });
         }
         if (!this.active) return;
+        const nextIds = memberships.map((group) => group.groupId);
+        if (this.groupIds.some((id) => !nextIds.includes(id))) {
+          this.groupCalls.clearLocalAccountState();
+          this.groupCalls.setLocalAddresses([this.principal.address]);
+        }
         this.manager.setLocalGroupMemberships(memberships);
         this.groupIds = memberships.map((group) => group.groupId);
         for (const groupId of this.groupIds)
@@ -484,6 +534,8 @@ export class AccountWorker {
     this.presence.stopVerifyPool();
     this.presence.clearLocalAccountState();
     this.presence.removeAllListeners();
+    this.calls.stop();
+    this.groupCalls.stop();
     this.manager.close();
     this.resources.close();
     this.closing = this.bridge.retireAndWait();

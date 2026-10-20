@@ -23,7 +23,10 @@ For the best experience, run a local Qortal Core. If you just want to explore fi
 ## Hosted Access
 
 You can use Qortal Hub without installing anything on your computer or mobile device.
-(NOTE: The hosted access version is still on 1.x.x version of Hub for the time being. New version is local only at the moment.)
+The `hosted-access` branch builds the current browser interface and its matching
+headless daemon package for real-time features. See the [hosted build and
+deployment instructions](./docs/hosted-access.md). Publishing this branch does
+not update the running hosted sites automatically.
 
 - [Qortal Hub](https://hub.qortal.link/)
 - [Qortal Go, the mobile version](https://go.qortal.link/)
@@ -38,6 +41,7 @@ You can use Qortal Hub without installing anything on your computer or mobile de
 ## Documentation
 
 - [Headless Hub daemon and Q-Chat API](./docs/hub-daemon.md)
+- [Hosted browser Hub: build and deploy](./docs/hosted-access.md)
 - [Reticulum integration](./docs/reticulum.md)
 - [Group audio calls](./docs/group-audio-calls.md)
 - [Development setup](./docs/development.md)

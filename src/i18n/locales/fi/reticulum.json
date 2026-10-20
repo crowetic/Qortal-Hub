@@ -82,6 +82,13 @@
     "unhide": "näytä",
     "until_unhidden": "piilota toistaiseksi"
   },
+  "hosted": {
+    "choose_screen": "Valitse näyttö tai ikkuna",
+    "connecting": "Yhdistetään Hub-taustapalveluun…",
+    "connection_failed": "Reaaliaikainen yhteys epäonnistui. Muodosta yhteys uudelleen ja yritä uudestaan.",
+    "invalid_config": "Palvelimella toimivan Hubin asetuksia ei voitu ladata.",
+    "reconnecting": "Reaaliaikainen yhteys katkesi. Yhdistetään uudelleen…"
+  },
   "image_viewer": {
     "actions": "image actions",
     "chat_image": "chat image",

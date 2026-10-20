@@ -4,6 +4,31 @@ import {
   assertAllowedReticulumSigningPayload,
 } from './reticulum-signing-policy';
 
+it('accepts an expiring hosted proof and refuses missing installation binding or foreign fields', () => {
+  const fields = {
+    type: 'HUB_BROWSER_SESSION',
+    nonce: 'a'.repeat(43),
+    origin: 'https://hub.test',
+    clientId: 'ab'.repeat(16),
+    address: 'Qwallet',
+    publicKey: 'public',
+    timestamp: Date.now(),
+  };
+  expect(() => assertAllowedPresenceSigningPayload(fields)).not.toThrow();
+  expect(() =>
+    assertAllowedPresenceSigningPayload({ ...fields, clientId: '' })
+  ).toThrow();
+  expect(() =>
+    assertAllowedPresenceSigningPayload({
+      ...fields,
+      timestamp: Date.now() - 60000,
+    })
+  ).toThrow();
+  expect(() =>
+    assertAllowedPresenceSigningPayload({ ...fields, amount: 100 })
+  ).toThrow();
+});
+
 function expectAllowed(
   validator: (payload: unknown) => void,
   payload: Record<string, unknown>

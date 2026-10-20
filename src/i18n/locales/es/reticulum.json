@@ -82,6 +82,13 @@
     "unhide": "mostrar",
     "until_unhidden": "ocultar hasta volver a mostrar"
   },
+  "hosted": {
+    "choose_screen": "Elige una pantalla o ventana",
+    "connecting": "Conectando con el demonio de Hub…",
+    "connection_failed": "Falló la conexión en tiempo real. Vuelve a conectarte e inténtalo de nuevo.",
+    "invalid_config": "No se pudo cargar la configuración del Hub alojado.",
+    "reconnecting": "Se perdió la conexión en tiempo real. Reconectando…"
+  },
   "image_viewer": {
     "actions": "image actions",
     "chat_image": "chat image",

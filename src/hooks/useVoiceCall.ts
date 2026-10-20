@@ -1452,7 +1452,9 @@ export function useVoiceCall(
       const captureAttempt = ++screenShareCaptureAttemptRef.current;
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        stream = (window as Window & { hubHosted?: boolean }).hubHosted
+          ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+          : await navigator.mediaDevices.getUserMedia({
           audio: false,
           video: {
             mandatory: {

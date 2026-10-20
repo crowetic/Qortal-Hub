@@ -82,6 +82,13 @@
     "unhide": "показать",
     "until_unhidden": "скрыть до отмены"
   },
+  "hosted": {
+    "choose_screen": "Выберите экран или окно",
+    "connecting": "Подключение к демону Hub…",
+    "connection_failed": "Не удалось установить соединение в реальном времени. Подключитесь заново и повторите попытку.",
+    "invalid_config": "Не удалось загрузить настройки размещённого Hub.",
+    "reconnecting": "Соединение в реальном времени потеряно. Переподключение…"
+  },
   "image_viewer": {
     "actions": "image actions",
     "chat_image": "chat image",

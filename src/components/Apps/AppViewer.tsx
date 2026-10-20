@@ -7,6 +7,7 @@ import { useThemeContext } from '../Theme/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { QORTAL_PROTOCOL } from '../../constants/constants';
 import { buildPreviewUrl } from './appPreviewUrl';
+import { hostedQappOrigin } from '../../hosted/qapp-frame';
 
 type AppViewerProps = {
   app: any;
@@ -15,6 +16,7 @@ type AppViewerProps = {
 
 export const AppViewer = forwardRef<HTMLIFrameElement, AppViewerProps>(
   ({ app, isDevMode }, forwardedRef) => {
+    const hosted = Boolean((window as Window & { hubHosted?: boolean }).hubHosted);
     const nativeViewRef = useRef<any>(null);
     const [nativeConfig, setNativeConfig] = useState<null | { partition: string; preload: string }>(null);
     const [nativeGuestActive, setNativeGuestActive] = useState(false);
@@ -83,7 +85,7 @@ export const AppViewer = forwardRef<HTMLIFrameElement, AppViewerProps>(
     );
 
     useEffect(() => {
-      if (!defaultUrl || !guestOwner.tabId ||
+      if (hosted || !defaultUrl || !guestOwner.tabId ||
           !guestOwner.name || !guestOwner.service ||
           preparingRef.current || preparedInitialUrlRef.current) return;
       if (!window.electronAPI?.qappGuestPrepare) {
@@ -97,7 +99,7 @@ export const AppViewer = forwardRef<HTMLIFrameElement, AppViewerProps>(
         defaultUrl,
         isDevMode
       ).then(setNativeConfig).catch(() => setNativeGuestFailed(true));
-    }, [defaultUrl, guestOwner, isDevMode, guestAttempt]);
+    }, [defaultUrl, guestOwner, isDevMode, guestAttempt, hosted]);
 
     const retryNativeGuest = () => {
       guestHelloRef.current = false;
@@ -112,7 +114,7 @@ export const AppViewer = forwardRef<HTMLIFrameElement, AppViewerProps>(
     };
 
     useEffect(() => () => {
-      void window.electronAPI.qappGuestRelease(guestOwner).catch(() => undefined);
+      void window.electronAPI?.qappGuestRelease?.(guestOwner).catch(() => undefined);
     }, [guestOwner]);
 
     useLayoutEffect(() => {
@@ -161,7 +163,11 @@ export const AppViewer = forwardRef<HTMLIFrameElement, AppViewerProps>(
 
     const postToApp = useCallback((message) => {
       if (nativeGuestActive) nativeViewRef.current?.send('qapp:event', message);
-    }, [nativeGuestActive]);
+      else if (hosted && nativeViewRef.current?.contentWindow) {
+        const origin = new URL(nativeViewRef.current.src).origin;
+        if (origin !== location.origin) nativeViewRef.current.contentWindow.postMessage(message, origin);
+      }
+    }, [nativeGuestActive, hosted]);
 
     const refreshAppFunc = (e) => {
       const { tabId } = e.detail;
@@ -385,7 +391,15 @@ export const AppViewer = forwardRef<HTMLIFrameElement, AppViewerProps>(
           width: '100%',
         }}
       >
-        {nativeConfig && !nativeGuestFailed ? createElement('webview' as any, {
+        {hosted && defaultUrl && hostedQappOrigin(defaultUrl) ? createElement('iframe', {
+          ref: nativeViewRef,
+          src: defaultUrl,
+          title: app?.name || 'Q-App',
+          credentialless: '',
+          sandbox: 'allow-scripts allow-same-origin allow-forms allow-popups allow-downloads',
+          allow: 'camera; microphone; display-capture; clipboard-write',
+          style: { border: 'none', flex: '1 1 auto', height: '100%', width: '100%', minHeight: 0 },
+        }) : nativeConfig && !nativeGuestFailed ? createElement('webview' as any, {
             ref: nativeViewRef,
             partition: nativeConfig.partition,
             preload: nativeConfig.preload,

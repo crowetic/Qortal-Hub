@@ -1,5 +1,6 @@
 import { build } from 'esbuild';
-import { mkdir, readdir, copyFile } from 'node:fs/promises';
+import { mkdir, readdir, copyFile, cp } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -47,6 +48,12 @@ const desktop = Object.keys(result.metafile.inputs).filter(
 );
 if (desktop.length) throw new Error(`Desktop dependency in daemon: ${desktop}`);
 const resources = path.join(root, '../electron/resources');
+if (existsSync(path.join(resources, 'private-transport')))
+  await cp(
+    path.join(resources, 'private-transport'),
+    path.join(root, 'dist/resources/private-transport'),
+    { recursive: true }
+  );
 for (const name of await readdir(resources)) {
   if (
     (name.endsWith('.py') && !name.startsWith('test_')) ||

@@ -13,6 +13,8 @@ export interface DaemonConfig {
   rnsPort: number;
   controlPort: number;
   customRnsConfig: boolean;
+  browserEnabled?: boolean;
+  browserPort?: number;
 }
 
 export function readConfig(env = process.env): DaemonConfig {
@@ -82,5 +84,7 @@ export function readConfig(env = process.env): DaemonConfig {
     rnsPort: number('QORTAL_HUB_RNS_PORT', 37438, 1024, 65535),
     controlPort: number('QORTAL_HUB_RNS_CONTROL_PORT', 37439, 1024, 65535),
     customRnsConfig: env.QORTAL_HUB_CUSTOM_RNS_CONFIG === '1',
+    browserEnabled: env.QORTAL_HUB_BROWSER_ENABLED === '1',
+    browserPort: number('QORTAL_HUB_BROWSER_PORT', 3193, 1, 65535),
   };
 }

@@ -4,6 +4,7 @@ import { startHubApi } from '../../electron/src/hub-api/server';
 import { readConfig } from './config';
 import { AccountRegistry } from './accounts';
 import { lockDataDirectory, startReticulum } from './reticulum';
+import { startHostedServer } from './hosted/server';
 
 async function main() {
   process.umask(0o077);
@@ -19,11 +20,13 @@ async function main() {
   let rns: Awaited<ReturnType<typeof startReticulum>> | undefined;
   let accounts: AccountRegistry | undefined;
   let api: Awaited<ReturnType<typeof startHubApi>> | undefined;
+  let hosted: Awaited<ReturnType<typeof startHostedServer>> | undefined;
   let closing: Promise<void> | undefined;
   let initialized = false;
   let terminating = false;
   const close = () =>
     (closing ||= (async () => {
+      await hosted?.close();
       await api?.close();
       await accounts?.close();
       await rns?.stop();
@@ -62,6 +65,13 @@ async function main() {
       },
       accounts.resolve
     );
+    if (config.browserEnabled) {
+      if (!config.api.origins.length)
+        throw new Error(
+          'Hosted browser access requires QORTAL_HUB_API_ORIGINS'
+        );
+      hosted = await startHostedServer(config);
+    }
     initialized = true;
     if (terminating) {
       await close();

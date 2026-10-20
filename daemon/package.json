@@ -14,9 +14,11 @@
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
-    "moment-timezone": "^0.5.48"
+    "moment-timezone": "^0.5.48",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.2",
     "esbuild": "0.28.2"
   }
 }

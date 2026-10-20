@@ -145,6 +145,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        globIgnores: ['**/hub-config.json'],
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10MB limit
         disableDevLogs: true, // Suppresses logs in development
       },

@@ -1,3 +1,4 @@
+import { isHostedQappMessage } from '../hosted/qapp-frame';
 import { useCallback, useEffect, useState } from 'react';
 import { executeEvent } from '../utils/events';
 import {
@@ -995,7 +996,9 @@ export const useQortalMessageListener = (
           requestedHandler: 'UI',
           payload: { name: event?.data?.payload?.name },
         };
-        nativeViewRef.current?.send('qapp:event', reply);
+        if (nativeGuestActive) nativeViewRef.current?.send('qapp:event', reply);
+        else if ((window as Window & { hubHosted?: boolean }).hubHosted && event.source)
+          event.source.postMessage(reply, event.origin);
         // Respond to close the MessageChannel and prevent pending connections
         if (event.ports[0]) {
           event.ports[0].postMessage({ result: true, error: null });
@@ -1028,16 +1031,25 @@ export const useQortalMessageListener = (
       void listener({ data: request.data, ports: [port] });
     };
     nativeView?.addEventListener('ipc-message', nativeListener);
+    const browserListener = (event: MessageEvent) => {
+      const frame = nativeViewRef?.current as HTMLIFrameElement | undefined;
+      if (!(window as Window & { hubHosted?: boolean }).hubHosted || nativeGuestActive ||
+        !isHostedQappMessage(event, frame)) return;
+      void listener(event);
+    };
+    window.addEventListener('message', browserListener);
 
     // Cleanup function to remove the event listener when the component is unmounted
     return () => {
       nativeView?.removeEventListener('ipc-message', nativeListener);
+      window.removeEventListener('message', browserListener);
     };
   }, [isDevMode, appName, appService, tabId, nativeGuestActive]);
 
   useEffect(() => {
     const api = window.electronAPI;
-    const nativeView = nativeGuestActive ? nativeViewRef?.current : null;
+    const hosted = Boolean((window as Window & { hubHosted?: boolean }).hubHosted);
+    const nativeView = nativeGuestActive || hosted ? nativeViewRef?.current : null;
     if (!api || !nativeView || tabId == null || !appName) return;
     let identity;
     try {
@@ -1055,7 +1067,11 @@ export const useQortalMessageListener = (
     };
     const expectedOwnerKey = `${owner.tabId}\u0000${owner.service}\u0000${owner.name}`;
     const postToApp = (payload) => {
-      if (nativeView.isConnected) nativeView.send('qapp:event', payload);
+      if (!nativeView.isConnected) return;
+      if (hosted && nativeView.contentWindow) {
+        const origin = new URL(nativeView.src).origin;
+        if (origin !== location.origin) nativeView.contentWindow.postMessage(payload, origin);
+      } else nativeView.send('qapp:event', payload);
     };
     const unsubscribe = api.onQAppReticulumEvent?.((payload) => {
       if (payload?.ownerKey !== expectedOwnerKey) return;

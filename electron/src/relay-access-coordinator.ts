@@ -18,40 +18,56 @@ type Signature = {
   signature: string;
 };
 type Signer = (fields: Record<string, unknown>) => Promise<Signature | null>;
-let signer: Signer | undefined;
-let accountReader: (() => Promise<string>) | undefined;
-let groupReader: ((address: string) => Promise<number[] | null>) | undefined;
-let groupRead: { epoch: number; promise: Promise<number[] | null> } | undefined;
-let accountRead: Promise<void> | undefined;
-let account = '';
-let generation = 0;
-let groups: Set<number> | null = null;
-let groupsAt = 0;
-const instances = new Set<RelayAccessCoordinator>();
-
+export type RelayAccountState = {
+  signer?: Signer;
+  accountReader?: () => Promise<string>;
+  groupReader?: (address: string) => Promise<number[] | null>;
+  groupRead?: { epoch: number; promise: Promise<number[] | null> };
+  accountRead?: Promise<void>;
+  account: string;
+  generation: number;
+  groups: Set<number> | null;
+  groupsAt: number;
+  instances: Set<RelayAccessCoordinator>;
+};
+export function createRelayAccountState(): RelayAccountState {
+  return {
+    account: '',
+    generation: 0,
+    groups: null,
+    groupsAt: 0,
+    instances: new Set(),
+  };
+}
+const defaultState = createRelayAccountState();
 export function configureRelaySigner(
   value: Signer,
   readAccount?: () => Promise<string>,
-  readGroups?: (address: string) => Promise<number[] | null>
+  readGroups?: (address: string) => Promise<number[] | null>,
+  state = defaultState
 ) {
-  signer = value;
-  accountReader = readAccount;
-  groupReader = readGroups;
+  state.signer = value;
+  state.accountReader = readAccount;
+  state.groupReader = readGroups;
 }
-export function setRelayAccount(address: string, force = false) {
-  if (address === account && !force) return;
-  const clearHints = !!account || !address;
-  account = address;
-  generation++;
+export function setRelayAccount(
+  address: string,
+  force = false,
+  state = defaultState
+) {
+  if (address === state.account && !force) return;
+  const clearHints = !!state.account || !address;
+  state.account = address;
+  state.generation++;
   if (clearHints) {
-    groups = null;
-    groupsAt = 0;
+    state.groups = null;
+    state.groupsAt = 0;
   }
-  for (const coordinator of instances) coordinator.clear();
+  for (const coordinator of state.instances) coordinator.clear();
 }
-export function setRelayGroups(ids: number[]) {
-  groups = new Set(ids.filter((id) => Number.isInteger(id) && id > 0));
-  groupsAt = Date.now();
+export function setRelayGroups(ids: number[], state = defaultState) {
+  state.groups = new Set(ids.filter((id) => Number.isInteger(id) && id > 0));
+  state.groupsAt = Date.now();
 }
 
 /** Main-process only. Announcements are selection hints; admission is enforced
@@ -68,10 +84,11 @@ export class RelayAccessCoordinator {
   private onDeath = () => this.clear();
   constructor(
     private sidecar: PrivateTransportSidecar,
-    private random = Math.random
+    private random = Math.random,
+    private accountState: RelayAccountState = defaultState
   ) {
     this.tickets = new RelayTicketWallet(sidecar);
-    instances.add(this);
+    this.accountState.instances.add(this);
     sidecar.on('death', this.onDeath);
   }
   clear() {
@@ -87,7 +104,7 @@ export class RelayAccessCoordinator {
   dispose() {
     this.clear();
     this.sidecar.off('death', this.onDeath);
-    instances.delete(this);
+    this.accountState.instances.delete(this);
   }
   async select(
     bridge: ReticulumBridge,
@@ -143,21 +160,23 @@ export class RelayAccessCoordinator {
     allowLoopback: boolean,
     deadlineAt: number
   ): Promise<TrustedRelayConfig> {
-    if (accountReader) {
-      if (!accountRead) {
-        const before = generation;
-        accountRead = accountReader()
+    if (this.accountState.accountReader) {
+      if (!this.accountState.accountRead) {
+        const before = this.accountState.generation;
+        this.accountState.accountRead = this.accountState
+          .accountReader()
           .then((address) => {
-            if (before !== generation) throw new Error('RELAY_ACCOUNT_CHANGED');
-            setRelayAccount(address);
+            if (before !== this.accountState.generation)
+              throw new Error('RELAY_ACCOUNT_CHANGED');
+            setRelayAccount(address, false, this.accountState);
           })
           .finally(() => {
-            accountRead = undefined;
+            this.accountState.accountRead = undefined;
           });
       }
-      await accountRead;
+      await this.accountState.accountRead;
     }
-    const epoch = generation;
+    const epoch = this.accountState.generation;
     const collect = async () =>
       (await bridge.getCommunityMasqueRelays(false))
         .map((value) => validateCommunityMasqueRelay(value, { allowLoopback }))
@@ -192,25 +211,36 @@ export class RelayAccessCoordinator {
     if (
       candidates.length &&
       candidates.every((r) => r.accessMode === 'groups') &&
-      (!groups || Date.now() - groupsAt >= 30_000) &&
-      groupReader &&
-      account
+      (!this.accountState.groups ||
+        Date.now() - this.accountState.groupsAt >= 30_000) &&
+      this.accountState.groupReader &&
+      this.accountState.account
     ) {
-      if (!groupRead || groupRead.epoch !== epoch) {
-        const operation = groupReader(account).catch(() => null);
-        groupRead = { epoch, promise: operation };
+      if (
+        !this.accountState.groupRead ||
+        this.accountState.groupRead.epoch !== epoch
+      ) {
+        const operation = this.accountState
+          .groupReader(this.accountState.account)
+          .catch(() => null);
+        this.accountState.groupRead = { epoch, promise: operation };
         void operation.finally(() => {
-          if (groupRead?.promise === operation) groupRead = undefined;
+          if (this.accountState.groupRead?.promise === operation)
+            this.accountState.groupRead = undefined;
         });
       }
-      const hints = await groupRead.promise;
-      if (epoch !== generation) throw new Error('RELAY_ACCOUNT_CHANGED');
-      if (hints) setRelayGroups(hints);
+      const hints = await this.accountState.groupRead.promise;
+      if (epoch !== this.accountState.generation)
+        throw new Error('RELAY_ACCOUNT_CHANGED');
+      if (hints) setRelayGroups(hints, this.accountState);
     }
     const score = (relay: TrustedRelayConfig) => {
       if (this.ready.has(this.key(relay))) return 0;
       if (relay.accessMode !== 'groups') return 1;
-      if (groups && relay.allowedGroupIds?.some((id) => groups!.has(id)))
+      if (
+        this.accountState.groups &&
+        relay.allowedGroupIds?.some((id) => this.accountState.groups!.has(id))
+      )
         return 1;
       return 2;
     };
@@ -232,9 +262,9 @@ export class RelayAccessCoordinator {
       (r) =>
         !(
           r.accessMode === 'groups' &&
-          groups &&
-          Date.now() - groupsAt < 30_000 &&
-          !r.allowedGroupIds?.some((id) => groups!.has(id))
+          this.accountState.groups &&
+          Date.now() - this.accountState.groupsAt < 30_000 &&
+          !r.allowedGroupIds?.some((id) => this.accountState.groups!.has(id))
         )
     );
     if (candidates.length && !eligible.length)
@@ -255,7 +285,7 @@ export class RelayAccessCoordinator {
       let lastError: unknown = new Error('MASQUE_RELAY_UNAVAILABLE');
       const next = () => {
         if (finished) return;
-        if (epoch !== generation) {
+        if (epoch !== this.accountState.generation) {
           finished = true;
           clearTimeout(deadline);
           reject(new Error('RELAY_ACCOUNT_CHANGED'));
@@ -274,7 +304,7 @@ export class RelayAccessCoordinator {
         this.prepare(candidate, epoch)
           .then((result) => {
             if (finished) return;
-            if (epoch !== generation) {
+            if (epoch !== this.accountState.generation) {
               finished = true;
               clearTimeout(deadline);
               reject(new Error('RELAY_ACCOUNT_CHANGED'));
@@ -298,7 +328,7 @@ export class RelayAccessCoordinator {
     });
   }
   private key(r: TrustedRelayConfig) {
-    return `${generation}:${r.relayAddress}:${r.relayCertSha256}:${JSON.stringify(r.allowedGroupIds ?? [])}`;
+    return `${this.accountState.generation}:${r.relayAddress}:${r.relayCertSha256}:${JSON.stringify(r.allowedGroupIds ?? [])}`;
   }
   private prepare(
     relay: TrustedRelayConfig,
@@ -391,7 +421,8 @@ export class RelayAccessCoordinator {
     result: PreparedRelay,
     epoch: number
   ) {
-    if (epoch !== generation) throw new Error('RELAY_ACCOUNT_CHANGED');
+    if (epoch !== this.accountState.generation)
+      throw new Error('RELAY_ACCOUNT_CHANGED');
     if (result.challenge) {
       if (
         relay.protocolVersion !== 3 ||
@@ -405,13 +436,13 @@ export class RelayAccessCoordinator {
         this.tickets.take(relay)
       );
     }
-    if (!result.ready || epoch !== generation)
+    if (!result.ready || epoch !== this.accountState.generation)
       throw new Error('RELAY_AUTH_UNAVAILABLE');
     return result;
   }
   private async ensureTickets(relay: TrustedRelayConfig, epoch: number) {
     if (relay.accessMode !== 'groups') return;
-    if (!this.bridge || !account || !signer)
+    if (!this.bridge || !this.accountState.account || !this.accountState.signer)
       throw new Error('RELAY_AUTH_UNAVAILABLE');
     // Refresh signed key commitment after hourly rotation, including renewals.
     const candidates = await this.bridge.getCommunityMasqueRelays(false);
@@ -435,9 +466,9 @@ export class RelayAccessCoordinator {
     await this.tickets.ensure(
       this.bridge,
       current,
-      account,
-      signer,
-      () => epoch === generation
+      this.accountState.account,
+      this.accountState.signer,
+      () => epoch === this.accountState.generation
     );
   }
   private scheduleRenewal(
@@ -453,7 +484,7 @@ export class RelayAccessCoordinator {
     const timer = setTimeout(
       async () => {
         this.renewals.delete(key);
-        if (epoch !== generation) return;
+        if (epoch !== this.accountState.generation) return;
         if (this.pending.has(key)) {
           this.scheduleRenewal(key, relay, expires, epoch, 1_000);
           return;
@@ -487,7 +518,10 @@ export class RelayAccessCoordinator {
           }
           // The relay's deadline remains authoritative if renewal is unavailable.
           // Retry promptly while it remains valid; never extend cached permission.
-          if (epoch === generation && Date.now() + 5_000 < expires) {
+          if (
+            epoch === this.accountState.generation &&
+            Date.now() + 5_000 < expires
+          ) {
             this.scheduleRenewal(key, relay, expires, epoch, 5_000);
           }
         } finally {
