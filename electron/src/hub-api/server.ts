@@ -206,7 +206,7 @@ export async function startHubApi(
         throw new HubApiError(400, 'invalid_channel');
     }
     if (request.method === 'GET' && action === 'channels' && !channelId) {
-      json(response, 200, { channels: runtime.channels(groupId) });
+      json(response, 200, runtime.channelMetadata(groupId));
       return;
     }
     if (request.method === 'GET' && channelId && route[4] === 'events') {

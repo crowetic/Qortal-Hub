@@ -208,6 +208,32 @@ it.skipIf(!authRepo)(
       );
       expect(history.status, JSON.stringify(history.data)).toBe(200);
       expect(history.data.result.events).toHaveLength(2);
+      const metadata = await post(
+        '/qortal/request',
+        {
+          requestType: 'GET_HUB_CHAT_CHANNELS',
+          payload: { walletId: wallet.walletId, groupId: 716 },
+        },
+        token
+      );
+      expect(metadata.status).toBe(200);
+      expect(metadata.data.result.categories).toEqual(
+        manager.getCategories(716)
+      );
+      expect(metadata.data.result.channels).toEqual(manager.getChannels(716));
+      const editBody = {
+        ...sendBody,
+        targetEventId: sent.data.eventId,
+        message: 'Edited through Auth and Hub',
+      };
+      const edited = await post('/hub/chat/edit', editBody, token);
+      expect(edited.status, JSON.stringify(edited.data)).toBe(202);
+      const editEvent = manager
+        .getHistory(716, 'general', 10)
+        .find((event) => event.eventId === edited.data.eventId)!;
+      expect(editEvent.eventType).toBe('edit');
+      expect(editEvent.targetEventId).toBe(sent.data.eventId);
+      expect(verifyReticulumChatEvent(editEvent)).toBe(true);
       const status = await fetch(
         `${authUrl}/hub/status?walletId=${wallet.walletId}`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -221,7 +247,8 @@ it.skipIf(!authRepo)(
         token
       );
       expect((await post('/hub/chat/send', sendBody, token)).status).toBe(403);
-      expect(manager.getHistory(716, 'general', 10)).toHaveLength(2);
+      expect((await post('/hub/chat/edit', editBody, token)).status).toBe(403);
+      expect(manager.getHistory(716, 'general', 10)).toHaveLength(3);
     } finally {
       await api?.close();
       manager?.close();

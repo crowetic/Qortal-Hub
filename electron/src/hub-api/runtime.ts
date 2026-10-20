@@ -9,6 +9,7 @@ export type HubApiChatManager = Pick<
   ReticulumChatManager,
   | 'getLocalAccountAddresses'
   | 'getChannels'
+  | 'getChannelMetadataBundle'
   | 'getHistory'
   | 'reserveAuthorSequence'
   | 'releaseAuthorSequence'
@@ -42,6 +43,15 @@ export class HubApiRuntime {
     this.assertAccount();
     try {
       return this.manager.getChannels(groupId);
+    } catch {
+      throw new HubApiError(403, 'group_access_denied');
+    }
+  }
+
+  channelMetadata(groupId: number) {
+    this.assertAccount();
+    try {
+      return this.manager.getChannelMetadataBundle(groupId);
     } catch {
       throw new HubApiError(403, 'group_access_denied');
     }

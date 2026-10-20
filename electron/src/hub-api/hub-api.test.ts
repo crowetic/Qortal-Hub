@@ -28,6 +28,12 @@ async function fixture() {
   const manager = Object.assign(new EventEmitter(), {
     getLocalAccountAddresses: vi.fn(() => [...addresses]),
     getChannels: vi.fn(() => [{ channelId: 'general' }]),
+    getChannelMetadataBundle: vi.fn(() => ({
+      channels: [{ channelId: 'general', categoryId: 'community' }],
+      categories: [{ categoryId: 'community', name: 'Community', position: 1 }],
+      ready: true,
+      snapshotVersion: 7,
+    })),
     getHistory: vi.fn(() => [
       { eventId: 'history-1', encryptedPayload: 'ciphertext' },
     ]),
@@ -103,6 +109,25 @@ function event(overrides = {}) {
     ...overrides,
   };
 }
+
+it('returns an atomic readable category/channel snapshot through the existing channels API', async () => {
+  const f = await fixture();
+  const response = await f.request('/v1/groups/716/channels');
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    channels: [{ channelId: 'general', categoryId: 'community' }],
+    categories: [{ categoryId: 'community', name: 'Community', position: 1 }],
+    ready: true,
+    snapshotVersion: 7,
+  });
+  expect(f.manager.getChannelMetadataBundle).toHaveBeenCalledWith(716);
+  f.manager.getChannelMetadataBundle.mockImplementationOnce(() => {
+    throw new Error('Not a group member');
+  });
+  expect((await f.request('/v1/groups/716/channels')).status).toBe(403);
+  f.switchAccount([OTHER]);
+  expect((await f.request('/v1/groups/716/channels')).status).toBe(503);
+});
 
 it('isolates dynamic wallet selection and simultaneous sequence leases in one group', async () => {
   const first = await fixture();
