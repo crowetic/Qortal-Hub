@@ -176,6 +176,16 @@ Completed work follows the standing commit-and-push authorization in the NuQloud
 `docs/group-audio-calls.md` · `docs/i18n_languages.md` ·
 `docs/reticulum-chat-sync-architecture.md` · `docs/qortalland-asset-standard.md`
 
+## NuQloud workspace locations
+
+On Crowetic's development machine, this repository's canonical source checkout is
+`/home/crowetic/git-repos/gitea/crowetic/Qortal-Hub`.
+The current ecosystem map is
+`/home/crowetic/git-repos/gitea/crowetic/NuQloud-Nextcloud/docs/nuqloud-repository-map.md`
+and its machine-readable source is `/home/crowetic/git-repos/gitea/crowetic/NuQloud-Nextcloud/config/nuqloud-repositories.json`.
+Use these canonical paths for new work. Old workspace paths may be compatibility
+symlinks; legacy copies and installed app trees are separate reconciliation targets.
+
 ## NuQloud task delivery
 
 The repository owner gives standing authorization to commit and push completed
