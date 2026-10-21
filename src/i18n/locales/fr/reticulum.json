@@ -83,11 +83,14 @@
     "until_unhidden": "masquer jusqu'à réaffichage"
   },
   "hosted": {
+    "busy": "Le service en temps réel est occupé. Veuillez réessayer dans un instant.",
     "choose_screen": "Choisir un écran ou une fenêtre",
     "connecting": "Connexion au démon Hub…",
     "connection_failed": "La connexion en temps réel a échoué. Reconnectez-vous et réessayez.",
     "invalid_config": "Impossible de charger la configuration du Hub hébergé.",
-    "reconnecting": "Connexion en temps réel perdue. Reconnexion…"
+    "reconnecting": "Connexion en temps réel perdue. Reconnexion…",
+    "request_failed": "La requête en temps réel a échoué. Veuillez réessayer.",
+    "request_timeout": "La requête en temps réel a expiré. Veuillez réessayer."
   },
   "image_viewer": {
     "actions": "image actions",

@@ -83,11 +83,14 @@
     "until_unhidden": "ausblenden bis zur wiedereinblendung"
   },
   "hosted": {
+    "busy": "Der Echtzeitdienst ist ausgelastet. Bitte versuche es in Kürze erneut.",
     "choose_screen": "Bildschirm oder Fenster auswählen",
     "connecting": "Verbindung zum Hub-Daemon wird hergestellt…",
     "connection_failed": "Die Echtzeitverbindung ist fehlgeschlagen. Bitte erneut verbinden und versuchen.",
     "invalid_config": "Die Konfiguration des gehosteten Hub konnte nicht geladen werden.",
-    "reconnecting": "Echtzeitverbindung unterbrochen. Verbindung wird wiederhergestellt…"
+    "reconnecting": "Echtzeitverbindung unterbrochen. Verbindung wird wiederhergestellt…",
+    "request_failed": "Die Echtzeitanfrage ist fehlgeschlagen. Bitte versuche es erneut.",
+    "request_timeout": "Die Echtzeitanfrage hat zu lange gedauert. Bitte versuche es erneut."
   },
   "image_viewer": {
     "actions": "image actions",

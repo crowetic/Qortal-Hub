@@ -83,11 +83,14 @@
     "until_unhidden": "hide until unhidden"
   },
   "hosted": {
+    "busy": "The real-time service is busy. Please try again shortly.",
     "choose_screen": "Choose a screen or window",
     "connecting": "Connecting to the Hub daemon…",
     "connection_failed": "The real-time connection failed. Please reconnect and try again.",
     "invalid_config": "The hosted Hub configuration could not be loaded.",
-    "reconnecting": "Real-time connection lost. Reconnecting…"
+    "reconnecting": "Real-time connection lost. Reconnecting…",
+    "request_failed": "The real-time request failed. Please try again.",
+    "request_timeout": "The real-time request timed out. Please try again."
   },
   "image_viewer": {
     "actions": "image actions",

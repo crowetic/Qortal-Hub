@@ -83,11 +83,14 @@
     "until_unhidden": "ocultar hasta volver a mostrar"
   },
   "hosted": {
+    "busy": "El servicio en tiempo real está ocupado. Inténtalo de nuevo en unos momentos.",
     "choose_screen": "Elige una pantalla o ventana",
     "connecting": "Conectando con el demonio de Hub…",
     "connection_failed": "Falló la conexión en tiempo real. Vuelve a conectarte e inténtalo de nuevo.",
     "invalid_config": "No se pudo cargar la configuración del Hub alojado.",
-    "reconnecting": "Se perdió la conexión en tiempo real. Reconectando…"
+    "reconnecting": "Se perdió la conexión en tiempo real. Reconectando…",
+    "request_failed": "La solicitud en tiempo real falló. Inténtalo de nuevo.",
+    "request_timeout": "La solicitud en tiempo real agotó el tiempo de espera. Inténtalo de nuevo."
   },
   "image_viewer": {
     "actions": "image actions",

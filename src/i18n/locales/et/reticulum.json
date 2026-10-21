@@ -83,11 +83,14 @@
     "until_unhidden": "peida kuni uuesti kuvamiseni"
   },
   "hosted": {
+    "busy": "Reaalajateenus on hõivatud. Palun proovi veidi aja pärast uuesti.",
     "choose_screen": "Vali ekraan või aken",
     "connecting": "Ühenduse loomine Hubi deemoniga…",
     "connection_failed": "Reaalajaühendus ebaõnnestus. Ühenda uuesti ja proovi veel kord.",
     "invalid_config": "Majutatud Hubi seadistust ei saanud laadida.",
-    "reconnecting": "Reaalajaühendus katkes. Ühendan uuesti…"
+    "reconnecting": "Reaalajaühendus katkes. Ühendan uuesti…",
+    "request_failed": "Reaalajapäring ebaõnnestus. Palun proovi uuesti.",
+    "request_timeout": "Reaalajapäring aegus. Palun proovi uuesti."
   },
   "image_viewer": {
     "actions": "image actions",

@@ -147,6 +147,34 @@ the public network. A split deployment needs no WebSocket proxy on CyberPanel.
 For a combined hostname, use one combined frontend Nginx vhost rather than two
 virtual hosts with the same server name.
 
+### Multiple frontend origins behind Cloudflare
+
+All servers serving the same frontend hostname must contain the same complete
+`www/` release and `hub-config.json`, pointing to the same public daemon URL.
+The static frontend servers do not hold the authenticated real-time session;
+the browser connects directly to the configured daemon. Frontend DNS balancing
+therefore does not require a separate daemon for each frontend origin.
+
+For updates, copy the new hashed assets to **every** frontend origin before
+switching their `index.html` files. Retain the previous hashed assets while old
+pages or service workers may still reference them. Otherwise an HTML response
+from one origin can reference an asset missing on another origin. Keep runtime
+configuration uncached at both the origin and CDN.
+
+Check each origin directly with normal TLS verification, for example:
+
+```bash
+curl --connect-to hub.qortal.link:443:web4.crowetic.com:443 \
+  https://hub.qortal.link/hub-config.json
+```
+
+Repeat for each active origin and compare its main asset URL/checksum as well.
+The hosted client bounds concurrent RPCs, discards stale typing notifications
+while busy or offline, and reports operational failures in a real-time notice.
+A real-time failure keeps the wallet and Q-App interface available. Queued
+requests are cancelled on disconnect or expiry; mutations are never replayed
+automatically after reconnecting.
+
 After TLS is configured:
 
 ```bash

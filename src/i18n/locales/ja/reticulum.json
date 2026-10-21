@@ -83,11 +83,14 @@
     "until_unhidden": "再表示するまで非表示"
   },
   "hosted": {
+    "busy": "リアルタイムサービスが混み合っています。しばらくしてからもう一度お試しください。",
     "choose_screen": "画面またはウィンドウを選択",
     "connecting": "Hubデーモンに接続中…",
     "connection_failed": "リアルタイム接続に失敗しました。再接続して、もう一度お試しください。",
     "invalid_config": "ホストされたHubの設定を読み込めませんでした。",
-    "reconnecting": "リアルタイム接続が切断されました。再接続中…"
+    "reconnecting": "リアルタイム接続が切断されました。再接続中…",
+    "request_failed": "リアルタイムリクエストに失敗しました。もう一度お試しください。",
+    "request_timeout": "リアルタイムリクエストがタイムアウトしました。もう一度お試しください。"
   },
   "image_viewer": {
     "actions": "image actions",

@@ -83,11 +83,14 @@
     "until_unhidden": "隐藏至手动取消"
   },
   "hosted": {
+    "busy": "实时服务繁忙，请稍后重试。",
     "choose_screen": "选择屏幕或窗口",
     "connecting": "正在连接Hub守护进程…",
     "connection_failed": "实时连接失败。请重新连接后再试。",
     "invalid_config": "无法加载托管Hub的配置。",
-    "reconnecting": "实时连接已断开。正在重新连接…"
+    "reconnecting": "实时连接已断开。正在重新连接…",
+    "request_failed": "实时请求失败，请重试。",
+    "request_timeout": "实时请求超时，请重试。"
   },
   "image_viewer": {
     "actions": "image actions",

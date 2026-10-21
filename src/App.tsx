@@ -7,6 +7,7 @@ import {
   Suspense,
 } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { isHostedRequestError } from './hosted/errors';
 import { Box, ButtonBase, Typography, useTheme } from '@mui/material';
 import { AnimatePresence } from 'framer-motion';
 import { decryptStoredWallet } from './utils/decryptWallet';
@@ -233,6 +234,9 @@ const RESIZE_OBSERVER_LOOP_MESSAGE =
   /ResizeObserver loop completed with undelivered notifications/i;
 
 const isIgnorableRuntimeFault = (value: unknown): boolean => {
+  // The hosted client surfaces transport/operation failures in its own notice.
+  // Keep the authenticated wallet and Q-Apps usable during a real-time outage.
+  if (isHostedRequestError(value)) return true;
   const extractMessage = (): string => {
     if (typeof value === 'string') return value;
     if (value instanceof Error) return value.message || '';
@@ -610,6 +614,7 @@ function App() {
   useEffect(() => {
     const handleWindowError = (event: ErrorEvent) => {
       if (isIgnorableRuntimeFault(event.error ?? event.message)) {
+        if (isHostedRequestError(event.error)) event.preventDefault();
         console.warn(
           'Ignoring non-fatal runtime fault',
           event.error || event.message,
@@ -634,6 +639,7 @@ function App() {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason;
       if (isIgnorableRuntimeFault(reason)) {
+        if (isHostedRequestError(reason)) event.preventDefault();
         console.warn('Ignoring non-fatal runtime fault', reason, event);
         return;
       }

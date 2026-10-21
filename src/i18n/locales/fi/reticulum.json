@@ -83,11 +83,14 @@
     "until_unhidden": "piilota toistaiseksi"
   },
   "hosted": {
+    "busy": "Reaaliaikapalvelu on varattu. Yritä hetken kuluttua uudelleen.",
     "choose_screen": "Valitse näyttö tai ikkuna",
     "connecting": "Yhdistetään Hub-taustapalveluun…",
     "connection_failed": "Reaaliaikainen yhteys epäonnistui. Muodosta yhteys uudelleen ja yritä uudestaan.",
     "invalid_config": "Palvelimella toimivan Hubin asetuksia ei voitu ladata.",
-    "reconnecting": "Reaaliaikainen yhteys katkesi. Yhdistetään uudelleen…"
+    "reconnecting": "Reaaliaikainen yhteys katkesi. Yhdistetään uudelleen…",
+    "request_failed": "Reaaliaikainen pyyntö epäonnistui. Yritä uudelleen.",
+    "request_timeout": "Reaaliaikainen pyyntö aikakatkaistiin. Yritä uudelleen."
   },
   "image_viewer": {
     "actions": "image actions",

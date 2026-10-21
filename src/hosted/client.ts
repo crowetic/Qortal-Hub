@@ -1,10 +1,18 @@
 import { sendMessageBackground } from '../messaging/MessagesToBackground';
-import i18n from '../i18n/i18n';
 import { encodeWire, decodeWire } from './wire';
+import { HostedRequestError, isHostedRequestError } from './errors';
 
 export type HostedState = 'idle' | 'connecting' | 'connected' | 'disconnected';
-const connectionError = () =>
-  new Error(i18n.t('reticulum:hosted.connection_failed'));
+const connectionError = () => new HostedRequestError('connection');
+// The daemon admits 32 operations per socket. Leave room for controls and
+// queue startup reads instead of sending a burst that exceeds that limit.
+const MAX_IN_FLIGHT = 16;
+const MAX_PENDING = 512;
+const MAX_BUFFERED = 4 * 1024 * 1024;
+const typingChannels = new Set([
+  'reticulumChat:sendTyping',
+  'reticulumChat:sendDirectTyping',
+]);
 
 export class HostedClient {
   private socket?: WebSocket;
@@ -15,10 +23,14 @@ export class HostedClient {
       resolve: (value: any) => void;
       reject: (error: Error) => void;
       timer: ReturnType<typeof setTimeout>;
+      frame: string;
+      sent: boolean;
     }
   >();
   private listeners = new Map<string, Set<(payload: any) => void>>();
   private retry?: ReturnType<typeof setTimeout>;
+  private drainTimer?: ReturnType<typeof setTimeout>;
+  private generation = 0;
   private identity?: { address: string; publicKey: string };
   private stopped = true;
   state: HostedState = 'idle';
@@ -48,10 +60,14 @@ export class HostedClient {
   }
   disconnect() {
     this.stopped = true;
+    this.generation++;
+    this.connecting = undefined;
     clearTimeout(this.retry);
+    clearTimeout(this.drainTimer);
     this.identity = undefined;
-    this.socket?.close();
+    const socket = this.socket;
     this.socket = undefined;
+    socket?.close();
     for (const item of this.pending.values()) {
       clearTimeout(item.timer);
       item.reject(connectionError());
@@ -68,17 +84,35 @@ export class HostedClient {
     )
       return Promise.resolve();
     this.stopped = false;
+    clearTimeout(this.retry);
     this.setState('connecting');
-    const task = this.open();
+    const generation = ++this.generation;
+    const task = this.open(generation);
     this.connecting = task;
     void task
       .finally(() => {
         if (this.connecting === task) this.connecting = undefined;
       })
-      .catch(() => {});
+      .catch(() => {
+        if (generation !== this.generation || this.stopped) return;
+        if (!this.identity && !this.socket) {
+          this.stopped = true;
+          this.setState('idle');
+          return;
+        }
+        this.setState('disconnected');
+        this.scheduleReconnect();
+      });
     return task;
   }
-  private async open() {
+  private scheduleReconnect() {
+    clearTimeout(this.retry);
+    if (!this.stopped)
+      this.retry = setTimeout(() => {
+        void this.connect().catch(() => {});
+      }, 3000);
+  }
+  private async open(generation: number) {
     const identity = await sendMessageBackground(
       'userInfo',
       {},
@@ -86,7 +120,7 @@ export class HostedClient {
       false,
       undefined
     );
-    if (this.stopped) throw connectionError();
+    if (this.stopped || generation !== this.generation) throw connectionError();
     if (!identity?.address || !identity?.publicKey) {
       this.setState('idle');
       throw connectionError();
@@ -146,8 +180,14 @@ export class HostedClient {
             if (!item) return;
             this.pending.delete(msg.id);
             clearTimeout(item.timer);
-            if (msg.error) item.reject(connectionError());
+            if (msg.error)
+              item.reject(
+                new HostedRequestError(
+                  msg.error === 'busy' ? 'busy' : 'operation'
+                )
+              );
             else item.resolve(msg.result);
+            this.drain();
           } else if (msg.type === 'sign') await this.sign(socket, msg);
         })().catch(() => {
           socket.close();
@@ -160,6 +200,7 @@ export class HostedClient {
         if (!ready) reject(connectionError());
         if (socket !== this.socket) return;
         this.socket = undefined;
+        clearTimeout(this.drainTimer);
         for (const item of this.pending.values()) {
           clearTimeout(item.timer);
           item.reject(connectionError());
@@ -171,10 +212,7 @@ export class HostedClient {
           state: 'starting',
           revision: Date.now(),
         });
-        if (!this.stopped)
-          this.retry = setTimeout(() => {
-            void this.connect().catch(() => {});
-          }, 3000);
+        this.scheduleReconnect();
       });
     });
   }
@@ -227,28 +265,79 @@ export class HostedClient {
         );
     }
   }
-  async rpc(channel: string, ...args: unknown[]): Promise<any> {
-    await this.connect();
-    if (
-      this.pending.size >= 128 ||
-      !this.socket ||
-      this.socket.bufferedAmount > 4 * 1024 * 1024
-    )
-      throw connectionError();
-    return new Promise((resolve, reject) => {
-      const id = crypto.randomUUID();
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(connectionError());
-      }, 30_000);
-      this.pending.set(id, { resolve, reject, timer });
+  private drain() {
+    clearTimeout(this.drainTimer);
+    const socket = this.socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    let inFlight = [...this.pending.values()].filter(
+      (item) => item.sent
+    ).length;
+    for (const [id, item] of this.pending) {
+      if (item.sent) continue;
+      if (inFlight >= MAX_IN_FLIGHT) break;
+      if (socket.bufferedAmount > MAX_BUFFERED) {
+        this.drainTimer = setTimeout(() => this.drain(), 25);
+        break;
+      }
+      item.sent = true;
+      inFlight++;
       try {
-        this.socket!.send(encodeWire({ type: 'rpc', id, channel, args }));
+        socket.send(item.frame);
       } catch {
         this.pending.delete(id);
-        clearTimeout(timer);
-        reject(connectionError());
+        clearTimeout(item.timer);
+        item.reject(connectionError());
+        inFlight--;
       }
-    });
+    }
+  }
+  private canSendTyping() {
+    return (
+      this.state === 'connected' &&
+      this.socket?.readyState === WebSocket.OPEN &&
+      this.pending.size < MAX_IN_FLIGHT &&
+      this.socket.bufferedAmount <= MAX_BUFFERED
+    );
+  }
+  async rpc(channel: string, ...args: unknown[]): Promise<any> {
+    const typing = typingChannels.has(channel);
+    // Typing is transient. Never reconnect, queue it behind startup work, or
+    // let its rejection escape the renderer's fire-and-forget callers.
+    if (typing && !this.canSendTyping()) return { success: false };
+    let generation = this.generation;
+    try {
+      const connection = this.connect();
+      generation = this.generation;
+      await connection;
+      if (
+        generation !== this.generation ||
+        !this.socket ||
+        this.socket.readyState !== WebSocket.OPEN
+      )
+        throw connectionError();
+      if (typing && !this.canSendTyping()) return { success: false };
+      if (this.pending.size >= MAX_PENDING)
+        throw new HostedRequestError('busy');
+      return await new Promise((resolve, reject) => {
+        const id = crypto.randomUUID();
+        const frame = encodeWire({ type: 'rpc', id, channel, args });
+        const timer = setTimeout(() => {
+          this.pending.delete(id);
+          reject(new HostedRequestError('timeout'));
+          this.drain();
+        }, 30_000);
+        this.pending.set(id, { resolve, reject, timer, frame, sent: false });
+        this.drain();
+      });
+    } catch (error) {
+      if (typing) return { success: false };
+      const failure = new HostedRequestError(
+        isHostedRequestError(error) ? error.code : 'connection',
+        channel
+      );
+      if (!this.stopped && generation === this.generation)
+        this.emit('request-error', failure);
+      throw failure;
+    }
   }
 }
