@@ -9,15 +9,54 @@ const packageDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..'
 );
+export async function checkHostedFrontend(metadata, timeout = 5000) {
+  const configUrl = new URL('/hub-config.json', metadata.origin).href;
+  const response = await fetch(configUrl, {
+    cache: 'no-store',
+    redirect: 'error',
+    signal: AbortSignal.timeout(timeout),
+  });
+  const help =
+    'Publish the complete generated www/ directory, including hub-config.json, beside index.html.';
+  if (!response.ok)
+    throw new Error(
+      `Hosted frontend configuration unavailable at ${configUrl}: HTTP ${response.status}. ${help}`
+    );
+  const text = await response.text();
+  let config;
+  try {
+    if (text.length > 16384) throw new Error('Configuration too large');
+    config = JSON.parse(text);
+  } catch {
+    throw new Error(`Hosted frontend configuration is not valid JSON. ${help}`);
+  }
+  if (config?.version !== 1 || typeof config.daemonUrl !== 'string')
+    throw new Error(`Hosted frontend configuration is invalid. ${help}`);
+  let daemonUrl;
+  try {
+    daemonUrl = new URL(config.daemonUrl, metadata.origin).href;
+  } catch {
+    throw new Error('Hosted frontend daemonUrl is invalid');
+  }
+  if (daemonUrl !== metadata.daemonUrl)
+    throw new Error(
+      `Hosted frontend daemonUrl does not match ${metadata.daemonUrl}. Deploy matching frontend and backend configuration.`
+    );
+  return { configUrl, daemonUrl };
+}
+
 export async function checkBackend({
   directory = packageDir,
   local = false,
+  backendOnly = false,
   timeout = 5000,
   installDir,
 } = {}) {
   const metadata = JSON.parse(
     readFileSync(path.join(directory, 'backend/deployment.json'), 'utf8')
   );
+  const frontend =
+    local || backendOnly ? null : await checkHostedFrontend(metadata, timeout);
   const daemon = installDir
     ? path.join(installDir, 'current/daemon')
     : path.join(directory, 'daemon');
@@ -73,6 +112,7 @@ export async function checkBackend({
     ready: true,
     url,
     origin: metadata.origin,
+    frontend,
     authenticatedPeerDelivery: 'requires a two-wallet chat test',
   };
 }
@@ -86,6 +126,7 @@ if (
   try {
     for (let i = 0; i < args.length; i++) {
       if (args[i] === '--local') options.local = true;
+      else if (args[i] === '--backend-only') options.backendOnly = true;
       else if (args[i] === '--install-dir' && args[i + 1])
         options.installDir = path.resolve(args[++i]);
       else if (args[i] === '--timeout' && args[i + 1]) {

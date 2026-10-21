@@ -108,6 +108,9 @@ environment files and account data outside the website document root.
 
 Copy the CONTENTS of www/, including .htaccess, into the site's document root.
 hub-config.json already points at ${config.daemonUrl}; no manual URL edit is needed.
+Confirm ${config.origin}/hub-config.json returns that JSON, not HTTP 404 or HTML.
+A plain dist/ upload omits this generated file and leaves browser chat and the
+hosted Q-App viewer disabled. Publish www/ in full, not just its assets.
 Enable rewrite rules and loading .htaccess. Retain existing site/TLS settings.
 Read frontend/cyberpanel.txt for the required Header Operations. OpenLiteSpeed
 does not apply Apache Header directives from .htaccess.
@@ -182,8 +185,10 @@ directly to the daemon VM. Its allowed origin stays ${config.origin}.
     node /srv/qortal-hub/current/backend/check-backend.mjs --local
     node /srv/qortal-hub/current/backend/check-backend.mjs
 
-The last command tests public TLS/WSS with the website Origin. A challenge proves
-transport readiness, not authenticated peer delivery. Log in at ${config.origin}
+The last command first checks ${config.origin}/hub-config.json and its daemon URL,
+then tests public TLS/WSS with the website Origin. Use --backend-only to check
+public WSS before publishing the frontend. A challenge proves transport
+readiness, not authenticated peer delivery. Log in at ${config.origin}
 with two wallets, send group/DM messages, reconnect and check history, transfer a
 file and test calls. Verify microphone permissions and NAT/TURN on your network.
 ${config.iceServers?.length ? 'Public ICE settings are included in hub-config.json.' : 'No ICE servers were supplied. Configure STUN/short-lived TURN credentials for WebRTC across NATs.'}

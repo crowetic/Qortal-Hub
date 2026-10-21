@@ -7,7 +7,10 @@ import { spawnSync } from 'node:child_process';
 import http from 'node:http';
 import { createRequire } from 'node:module';
 import { options, buildHosted } from './build-hosted.mjs';
-import { checkBackend } from './hosted-backend/check-backend.mjs';
+import {
+  checkBackend,
+  checkHostedFrontend,
+} from './hosted-backend/check-backend.mjs';
 import { readSetup } from './configure-hosted.mjs';
 import {
   writeHostedDeployment,
@@ -376,6 +379,59 @@ test('unexpected existing state and disabled browser environments fail before co
   assert.deepEqual(hooks.calls, []);
 });
 
+test('public readiness rejects missing or mismatched hosted frontend configuration', async (t) => {
+  let status = 404,
+    body = '<html>Not found</html>';
+  const frontend = http.createServer((_request, response) => {
+    response.writeHead(status);
+    response.end(body);
+  });
+  await new Promise((resolve) => frontend.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => frontend.close(resolve)));
+  const metadata = {
+    origin: `http://127.0.0.1:${frontend.address().port}`,
+    daemonUrl: 'wss://daemon.test/hub-ws',
+  };
+  const directory = fixture(t);
+  await packageFixture(directory);
+  fs.writeFileSync(
+    path.join(directory, 'backend/deployment.json'),
+    JSON.stringify(metadata)
+  );
+  // This is the live failure: the daemon can be up while its frontend config
+  // is missing. Reject before even trying a WebSocket or loading its module.
+  await assert.rejects(
+    checkBackend({ directory }),
+    /hub-config.json.*HTTP 404/
+  );
+  status = 200;
+  await assert.rejects(checkHostedFrontend(metadata), /not valid JSON/);
+  body = JSON.stringify({ version: 2, daemonUrl: metadata.daemonUrl });
+  await assert.rejects(
+    checkHostedFrontend(metadata),
+    /configuration is invalid/
+  );
+  body = JSON.stringify({ version: 1, daemonUrl: 'not a websocket URL' });
+  await assert.rejects(
+    checkHostedFrontend(metadata),
+    /daemonUrl does not match/
+  );
+  body = JSON.stringify({
+    version: 1,
+    daemonUrl: 'wss://secret:password@wrong.test/hub-ws',
+  });
+  await assert.rejects(checkHostedFrontend(metadata), (error) => {
+    assert.match(error.message, /daemonUrl does not match/);
+    assert.doesNotMatch(error.message, /secret|password/);
+    return true;
+  });
+  body = JSON.stringify({ version: 1, daemonUrl: metadata.daemonUrl });
+  assert.deepEqual(await checkHostedFrontend(metadata), {
+    configUrl: `${metadata.origin}/hub-config.json`,
+    daemonUrl: metadata.daemonUrl,
+  });
+});
+
 test('readiness probe checks real HTTP identity and Origin-bound WebSocket challenge', async (t) => {
   const directory = fixture(t);
   const { WebSocketServer } = createRequire(
@@ -429,6 +485,16 @@ test('readiness probe checks real HTTP identity and Origin-bound WebSocket chall
     'dir'
   );
   assert.equal((await checkBackend({ directory, local: true })).ready, true);
+  const publicMetadataFile = path.join(directory, 'backend/deployment.json');
+  const publicMetadata = JSON.parse(
+    fs.readFileSync(publicMetadataFile, 'utf8')
+  );
+  publicMetadata.daemonUrl = `ws://127.0.0.1:${server.address().port}/realtime`;
+  fs.writeFileSync(publicMetadataFile, JSON.stringify(publicMetadata));
+  assert.equal(
+    (await checkBackend({ directory, backendOnly: true })).frontend,
+    null
+  );
   healthy = false;
   await assert.rejects(
     checkBackend({ directory, local: true }),

@@ -98,6 +98,14 @@ contexts as described in `frontend/cyberpanel.txt`:
 - `Cross-Origin-Embedder-Policy: credentialless`
 - `Cache-Control: no-store` specifically for `/hub-config.json`, including CDN caches
 
+Publish the **contents of the generated `www/` directory**, including
+`hub-config.json`, into `/home/hub.qortal.link/public_html/`. A plain `dist/`
+upload does not include the generated daemon connection settings. Check that
+`https://hub.qortal.link/hub-config.json` returns JSON containing the expected
+`daemonUrl`, rather than a 404 or the site's HTML. Without this file the
+renderer runs in ordinary browser mode: Reticulum is unavailable and Q-Apps
+attempt to use Electron's embedded viewer instead of hosted iframes.
+
 OpenLiteSpeed supports rewrite rules in `.htaccess`, not Apache header
 directives. Use the vhost Context Header Operations ([custom headers](https://docs.openlitespeed.org/config/headers/),
 [security headers](https://docs.openlitespeed.org/security/headers/)). The generated
@@ -147,9 +155,13 @@ node /srv/qortal-hub/current/backend/check-backend.mjs --local
 node /srv/qortal-hub/current/backend/check-backend.mjs
 ```
 
-The probes establish HTTP/WebSocket readiness and correct Origin handling.
-They do not prove authenticated peer delivery; complete the two-wallet checks
-in the Test section. Neither External Auth nor a server wallet is required.
+The local probe establishes HTTP/WebSocket readiness. The public probe also
+requires the frontend's `/hub-config.json` to load as JSON and point to this
+package's daemon URL; a missing configuration or a mismatched deployment fails
+the check. Use `--backend-only` to check public WSS before the static site is
+published. Neither probe proves authenticated peer delivery; complete the
+two-wallet checks in the Test section. Neither External Auth nor a server
+wallet is required.
 
 ## Updates and rollback
 
