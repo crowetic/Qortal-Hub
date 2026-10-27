@@ -106,6 +106,14 @@ syncs Capacitor, clears stale compiled Electron output, builds the desktop
 transport sidecar and packages the AppImage with publishing disabled. No manual
 renderer preparation or host Go override is required.
 
+Debian 11's final packages now come from the official Debian archive, including
+`bullseye-security`. The build image uses those archived repositories with Debian
+signature verification; metadata expiry checks are disabled only for those
+archive entries. This preserves the glibc 2.31 build baseline. If an older build
+fails with `404 Not Found` for `deb.debian.org/debian-security` packages, pull the
+latest `develop` and rerun `./build-appimage.sh`; the changed Dockerfile rebuilds
+the dependency layers automatically. Host APT configuration is unaffected.
+
 The Go sidecar provides the regular desktop app's QUIC/MASQUE transport. It is
 also shared by other Hub variants; using Go does not select a hosted build.
 

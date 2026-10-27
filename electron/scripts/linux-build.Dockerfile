@@ -6,8 +6,21 @@ FROM debian:bullseye-slim
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC
 
+# Bullseye's final security packages moved to archive.debian.org after LTS ended.
+# Keep glibc 2.31; live security indexes can still reference removed .deb files.
+# HTTP bootstraps ca-certificates; APT still verifies Debian signatures/hashes.
+# Only these immutable archive entries disable the metadata expiry check.
+RUN rm -f /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources \
+    && printf '%s\n' \
+    'deb [check-valid-until=no signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://archive.debian.org/debian bullseye main' \
+    'deb [check-valid-until=no signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://archive.debian.org/debian bullseye-updates main' \
+    'deb [check-valid-until=no signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://archive.debian.org/debian-security bullseye-security main' \
+    > /etc/apt/sources.list \
+    && rm -rf /var/lib/apt/lists/*
+
 # python3-dev pulls libpython3.9-dev (PyInstaller); python3 pulls libpython3.9-stdlib (.so runtime).
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get -o APT::Update::Error-Mode=any -o Acquire::Retries=3 update \
+    && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     git \
