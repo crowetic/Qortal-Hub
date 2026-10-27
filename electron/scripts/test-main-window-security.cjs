@@ -10,7 +10,10 @@ const {
   installMainWindowNavigationPolicy,
   requireMainWindowSender,
 } = require('../build/src/main-window-policy');
-const { registerMainWindowFileIpc } = require('../build/src/main-window-files');
+const {
+  installMainWindowFileCleanup,
+  registerMainWindowFileIpc,
+} = require('../build/src/main-window-files');
 const {
   registerMainWindowWalletStorage,
 } = require('../build/src/main-window-storage');
@@ -114,8 +117,17 @@ app.whenReady().then(async () => {
     main.webContents.on('did-create-window', () => {
       childCount++;
     });
-    main.webContents.on('did-navigate', () =>
-      files.revoke(main.webContents.id)
+    let saveCleanupCount = 0;
+    const revokedContents = [];
+    installMainWindowFileCleanup(
+      main.webContents,
+      (id) => {
+        revokedContents.push(id);
+        files.revoke(id);
+      },
+      () => {
+        saveCleanupCount++;
+      }
     );
     await main.loadURL(shellUrl);
     const run = (source) => main.webContents.executeJavaScript(source);
@@ -272,8 +284,22 @@ app.whenReady().then(async () => {
       /restricted/
     );
     assert.equal(fs.readFileSync(secret, 'utf8'), 'synthetic secret');
+
+    // Native getters become invalid during teardown. Production cleanup must
+    // revoke the captured window's grants and cancel saves without reading them.
+    const mainContents = main.webContents;
+    const mainContentsId = mainContents.id;
+    const beforeDestroy = saveCleanupCount;
+    const destroyed = new Promise((resolve) =>
+      mainContents.once('destroyed', resolve)
+    );
+    main.destroy();
+    await destroyed;
+    assert.equal(saveCleanupCount, beforeDestroy + 1);
+    assert.equal(revokedContents.at(-1), mainContentsId);
+    assert.equal(main.isDestroyed(), true);
     console.log(
-      'PASS: navigation, popup/redirect blocking, preload isolation, IPC origin checks, wallet storage, ZIP reads, backup/chunk writes, cleanup, QApp request/reply, and reload'
+      'PASS: navigation, popup/redirect blocking, preload isolation, IPC origin checks, wallet storage, ZIP reads, backup/chunk writes, cleanup, QApp request/reply, reload, and destroyed-window cleanup'
     );
   } catch (error) {
     console.error(error);

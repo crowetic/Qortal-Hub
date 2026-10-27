@@ -1,4 +1,9 @@
-import type { Dialog, IpcMain, IpcMainInvokeEvent } from 'electron';
+import type {
+  Dialog,
+  IpcMain,
+  IpcMainInvokeEvent,
+  WebContents,
+} from 'electron';
 import { promises as fs } from 'fs';
 import { dirname, isAbsolute, join, basename, resolve } from 'path';
 import { isUint8Array } from 'util/types';
@@ -9,6 +14,23 @@ type Grants = {
   directories: Map<string, string>;
   writes: Map<string, string>;
 };
+
+export function installMainWindowFileCleanup(
+  contents: Pick<WebContents, 'id' | 'on'>,
+  revokeFiles: (contentsId: number) => void,
+  cleanupSaves: () => void
+): void {
+  // Capture native identity while the window is alive. The destroyed event
+  // must not look up BrowserWindow.webContents or read native object getters.
+  const contentsId = contents.id;
+  const cleanup = () => {
+    revokeFiles(contentsId);
+    cleanupSaves();
+  };
+  contents.on('did-navigate', cleanup);
+  contents.on('render-process-gone', cleanup);
+  contents.on('destroyed', cleanup);
+}
 
 // Keep the renderer API compatible, but only accept paths selected by a native
 // dialog in this document's lifetime. A read grant never grants write access.

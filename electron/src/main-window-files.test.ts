@@ -9,8 +9,48 @@ import {
 } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { registerMainWindowFileIpc } from './main-window-files';
+import {
+  installMainWindowFileCleanup,
+  registerMainWindowFileIpc,
+} from './main-window-files';
+
+describe('main window file cleanup lifecycle', () => {
+  it('revokes grants and cancels saves after native identity becomes unreadable', () => {
+    const contents = new EventEmitter();
+    let destroyed = false;
+    Object.defineProperty(contents, 'id', {
+      get: () => {
+        if (destroyed) throw new TypeError('Object has been destroyed');
+        return 42;
+      },
+    });
+    const revoke = vi.fn();
+    const cleanup = vi.fn();
+    installMainWindowFileCleanup(contents as any, revoke, cleanup);
+    contents.emit('did-navigate');
+    contents.emit('render-process-gone');
+    destroyed = true;
+    expect(() => contents.emit('destroyed')).not.toThrow();
+    expect(revoke.mock.calls).toEqual([[42], [42], [42]]);
+    expect(cleanup).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps file grants and saves until navigation actually commits', () => {
+    const contents = Object.assign(new EventEmitter(), { id: 42 });
+    const revoke = vi.fn();
+    const cleanup = vi.fn();
+    installMainWindowFileCleanup(contents as any, revoke, cleanup);
+    contents.emit('will-navigate');
+    contents.emit('did-start-navigation');
+    expect(revoke).not.toHaveBeenCalled();
+    expect(cleanup).not.toHaveBeenCalled();
+    contents.emit('did-navigate');
+    expect(revoke).toHaveBeenCalledWith(42);
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+});
 
 describe('main window file selections', () => {
   let root: string;
