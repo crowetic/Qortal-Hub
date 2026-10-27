@@ -541,6 +541,68 @@ mvn -DskipJUnitTests=true package
 Install the resulting Core JAR and restart Core. An existing running process
 continues using its old classes until it is restarted.
 
+### Test the Electron app from this checkout
+
+Use Node 22.12+ (Node 24 is suitable), Python 3.9+, Git, and a native C/C++
+build toolchain. Electron startup also builds the private transport sidecar,
+which requires Go 1.26+ or a running Docker daemon. If Go is outside `PATH`, set
+`QORTAL_GO_BINARY` to its executable's absolute path.
+
+From the repository root:
+
+```bash
+npm ci
+npm run build
+npx --no-install cap sync @capacitor-community/electron
+cd electron
+npm ci
+npx --no-install install-electron
+env -u ELECTRON_RUN_AS_NODE npm run electron:start
+```
+
+The explicit `install-electron` command downloads the Electron binary when
+`npm ci` has installed only the JavaScript package. Unsetting
+`ELECTRON_RUN_AS_NODE` lets Electron open its normal desktop interface. The
+`env -u` syntax above is for Linux/macOS; on Windows, remove that environment
+variable before running `npm run electron:start`.
+
+Use the normal production renderer build above for this test. A browser-only
+Vite session does not exercise Electron's main-process signer or durable
+transaction journal. Repeat the renderer build and Capacitor sync after changing
+renderer code. Electron's start command compiles its own code, bundles the
+signing engine, and rebuilds native modules for the installed Electron version.
+
+In Hub's Connection Mode, select the updated local Core. Manual node setup can
+use `http://127.0.0.1:12391` and that Core's existing API key. Keep the test Core
+running and verify the selected URL before testing; selecting a different public
+Core can produce an upgrade error even when the local Core is current.
+
+Read-only checks against the running Core are `GET /admin/info` for the build
+identity and `GET /openapi.json` for the required endpoint paths listed above.
+Their presence verifies API availability; it does not verify Electrum
+connectivity, a wallet's spendable balance, or a completed payment.
+
+After the automated checks, manually verify a Wallet Send and a Q-App
+`SEND_COIN` request with the normal permission prompt. Rejecting a request should
+leave funds untouched. Any approved funded send or trade is a separate manual
+test: the current signer supports mainnet wallets, and its synthetic test keys
+must never receive funds. Check the selected coin, recipient, amount and fee
+before approving. QORT and ARRR exercise different signing paths.
+
+For a Linux package to test on the build machine, run this from `electron/`
+after building and syncing the renderer:
+
+```bash
+npm run electron:make-local
+```
+
+This creates `electron/dist/Qortal-Hub.AppImage` without publishing a release.
+For Linux distribution to other machines, use the Docker packaging commands in
+[the development guide](development.md) to build native dependencies against
+the older glibc baseline. To return to another Hub branch later, preserve any
+edits, switch branches, and rebuild/sync again so Electron loads that branch's
+renderer and native code.
+
 ## References
 
 - [BIP 174: Partially Signed Bitcoin Transaction Format](https://bips.dev/174/)
