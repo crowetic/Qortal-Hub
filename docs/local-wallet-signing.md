@@ -589,19 +589,20 @@ test: the current signer supports mainnet wallets, and its synthetic test keys
 must never receive funds. Check the selected coin, recipient, amount and fee
 before approving. QORT and ARRR exercise different signing paths.
 
-For a Linux package to test on the build machine, run this from `electron/`
-after building and syncing the renderer:
+For the regular Linux AppImage, run this from the repository root:
 
 ```bash
-npm run electron:make-local
+./build-appimage.sh
 ```
 
-This creates `electron/dist/Qortal-Hub.AppImage` without publishing a release.
-For Linux distribution to other machines, use the Docker packaging commands in
-[the development guide](development.md) to build native dependencies against
-the older glibc baseline. To return to another Hub branch later, preserve any
-edits, switch branches, and rebuild/sync again so Electron loads that branch's
-renderer and native code.
+This invokes `npm run electron:make-lin-docker-appimage` in `electron/`, builds
+and syncs a fresh renderer inside Docker, and creates
+`electron/dist/Qortal-Hub.AppImage` with a `desktop-build.json` provenance receipt.
+The container provides Go and Python and publishes no release. Use this path for
+Linux testing and distribution. See [the development guide](development.md) for
+requirements and other package targets. Preserve edits before switching Hub
+branches, and rebuild/sync after switching so Electron loads the selected
+branch's renderer and native code.
 
 ## References
 

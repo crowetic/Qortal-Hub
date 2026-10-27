@@ -81,6 +81,52 @@ their matching assets; rebuilding does not repair an existing recording's maps.
 
 ## Build Qortal-Hub from Source
 
+### Regular Linux desktop AppImage
+
+From a desktop source checkout (`develop` for current development), run:
+
+```bash
+./build-appimage.sh
+# Equivalent root npm entry point:
+npm run build:appimage
+```
+
+Choose either command. The script invokes Phil's packaging command from
+`electron/`:
+
+```bash
+npm run electron:make-lin-docker-appimage
+```
+
+The host needs Git, npm and a running Docker engine (or Podman via
+`CONTAINER_CMD=podman`). Node 22, Python, the Go compiler, native module rebuilds
+and Reticulum freezing run inside the Debian 11 container. It installs locked
+dependencies in both npm projects, builds the standard production renderer,
+syncs Capacitor, clears stale compiled Electron output, builds the desktop
+transport sidecar and packages the AppImage with publishing disabled. No manual
+renderer preparation or host Go override is required.
+
+The Go sidecar provides the regular desktop app's QUIC/MASQUE transport. It is
+also shared by other Hub variants; using Go does not select a hosted build.
+
+The build refuses `hosted-access` / `hub-daemon` branches and tracked hosted
+runtime code. It prints the actual branch, commit and dirty state. An unavailable
+container engine stops the build before changing outputs; there is no native
+packaging fallback.
+
+Successful output:
+
+- `electron/dist/Qortal-Hub.AppImage`
+- `electron/dist/desktop-build.json`: desktop variant, Docker command, source
+  commit/dirty state, tool versions, Reticulum source and artifact SHA256.
+
+The container checks rebuilt SQLite and frozen Reticulum binaries against the
+glibc 2.31 baseline, and checks the SQLite binary actually included in the
+package. Its SQLite smoke test uses Electron's runtime after the Electron ABI
+rebuild. Keep the receipt with the AppImage when sharing a test build.
+
+### Native development and other packages
+
 Follow these steps:
 
 - install dependencies: `npm install`
@@ -95,11 +141,9 @@ Alternatively you can start the app:
 
 - `npm run electron:start`
 
-Or create an Executable Package for linux:
-
-- `npm run electron:make-local`
-
-Reticulum is bundled as a native binary for packaged Electron builds. For Linux release artifacts, prefer the Docker commands so the bundled native binaries are built on Debian 11 with an older glibc compatibility baseline:
+Reticulum is bundled as a native binary for packaged Electron builds. Use Docker
+for Linux packages so the native binaries build on Debian 11 with an older glibc
+compatibility baseline:
 
 - Linux x64: `npm run electron:make-lin-docker` or `npm run electron:make-lin-docker-appimage`
 - Linux arm64: `npm run electron:make-arm-docker` or `npm run electron:make-arm-docker-appimage`

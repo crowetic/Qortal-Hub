@@ -55,4 +55,15 @@ If you hit a snag, join the community on [Discord](https://discord.com/invite/54
 
 ## Development
 
+Build the regular Linux desktop AppImage from this repository's desktop branch:
+
+```bash
+./build-appimage.sh
+```
+
+This runs `npm run electron:make-lin-docker-appimage` in `electron/`, including a
+fresh renderer build and Capacitor sync inside Docker. Outputs and build
+provenance are written to `electron/dist/`. Docker supplies the desktop Go
+transport compiler and Reticulum build tools.
+
 See the dedicated page for [development](./docs/development.md).

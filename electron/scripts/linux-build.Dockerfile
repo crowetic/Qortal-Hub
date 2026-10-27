@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     gnupg \
     build-essential \
+    binutils \
     python3 \
     python3-pip \
     python3-venv \
@@ -21,10 +22,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     dpkg-dev \
     rpm \
     squashfs-tools \
+    libgtk-3-0 \
+    libnss3 \
+    libasound2 \
+    libgbm1 \
+    libxss1 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# The regular desktop app uses this compiler for its QUIC/MASQUE sidecar.
+# Checksums: https://go.dev/dl/?mode=json&include=all (go1.26.0).
+ARG GO_VERSION=1.26.0
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) go_arch=amd64; go_sha=aac1b08a0fb0c4e0a7c1555beb7b59180b05dfc5a3d62e40e9de90cd42f88235 ;; \
+      arm64) go_arch=arm64; go_sha=bd03b743eb6eb4193ea3c3fd3956546bf0e3ca5b7076c8226334afe6b75704cd ;; \
+      *) echo 'Unsupported Go build architecture' >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${go_arch}.tar.gz" -o /tmp/go.tar.gz; \
+    printf '%s  /tmp/go.tar.gz\n' "${go_sha}" | sha256sum -c -; \
+    tar -C /usr/local -xzf /tmp/go.tar.gz; \
+    rm /tmp/go.tar.gz; \
+    /usr/local/go/bin/go version
+ENV PATH="/usr/local/go/bin:${PATH}"
 
 WORKDIR /workspace

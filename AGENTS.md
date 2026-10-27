@@ -13,15 +13,16 @@ the desktop app after a `cap sync`.
 
 Root (renderer):
 
-| Command                 | What                                                                     |
-| ----------------------- | ------------------------------------------------------------------------ |
-| `npm run dev`           | Vite dev server on `http://localhost:5173/` — browser only, no Reticulum |
-| `npm run build`         | Production build into `dist/`                                            |
-| `npm test`              | Vitest watch mode                                                        |
-| `npx vitest run <path>` | Run one test file — preferred while iterating                            |
-| `npm run coverage`      | Vitest with coverage                                                     |
-| `npm run lint`          | ESLint, `--max-warnings 0`                                               |
-| `npm run format`        | Prettier over the whole repo                                             |
+| Command                  | What                                                                     |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `npm run dev`            | Vite dev server on `http://localhost:5173/` — browser only, no Reticulum |
+| `npm run build`          | Production build into `dist/`                                            |
+| `npm run build:appimage` | Regular Linux x64 desktop AppImage through the Docker build              |
+| `npm test`               | Vitest watch mode                                                        |
+| `npx vitest run <path>`  | Run one test file — preferred while iterating                            |
+| `npm run coverage`       | Vitest with coverage                                                     |
+| `npm run lint`           | ESLint, `--max-warnings 0`                                               |
+| `npm run format`         | Prettier over the whole repo                                             |
 
 Desktop (needs Python 3.9+ and Git on PATH):
 
@@ -31,9 +32,21 @@ npx cap sync @capacitor-community/electron   # REQUIRED after web/native changes
 cd electron && npm install && npm run electron:start
 ```
 
-Packaging lives in `electron/`: `electron:make-win`, `electron:make-mac`,
-`electron:make-lin-docker`, `electron:make-arm-docker`. Linux release artifacts
-should use the Docker variants so native binaries build against an older glibc.
+**Owner desktop build requirement:** Build regular Linux x64 AppImages with
+`./build-appimage.sh` (or root `npm run build:appimage`). This delegates to
+`npm run electron:make-lin-docker-appimage` in `electron/`. Use this Docker path
+for testing and distribution; do not substitute `electron:make-local`. If the
+container engine is unavailable, report that blocker and retain the previous
+artifact. The wrapper checks the desktop source branch and the container builds
+and syncs a fresh standard renderer, Electron, Go transport and Reticulum.
+Read `electron/dist/desktop-build.json` to identify a completed Docker build.
+
+The regular desktop app's QUIC/MASQUE transport requires Go. Docker supplies its
+compiler inside the build image; no host Go path or hosted/daemon build is needed.
+Native `electron:start` remains available for development with its own tools.
+
+Packaging for other targets lives in `electron/`: `electron:make-win`,
+`electron:make-mac`, `electron:make-lin-docker`, `electron:make-arm-docker`.
 
 There is no typecheck script; `tsc` runs via `vite-plugin-checker` during dev.
 

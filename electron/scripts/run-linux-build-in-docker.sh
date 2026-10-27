@@ -68,6 +68,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ELECTRON_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${ELECTRON_DIR}/.." && pwd)"
 
+SOURCE_BRANCH="$(git -C "${REPO_ROOT}" symbolic-ref --quiet --short HEAD || true)"
+SOURCE_COMMIT="$(git -C "${REPO_ROOT}" rev-parse --verify HEAD)"
+case "${SOURCE_BRANCH}" in
+  hosted-access|hub-daemon)
+    echo "Desktop packaging is unavailable on ${SOURCE_BRANCH}. Switch to develop for the regular desktop app." >&2
+    exit 65
+    ;;
+esac
+if [[ -n "$(git -C "${REPO_ROOT}" ls-files -- src/hosted/bootstrap.ts daemon/package.json)" ]]; then
+  echo "This checkout contains tracked hosted/daemon implementation. Use the desktop develop checkout." >&2
+  exit 65
+fi
+SOURCE_DIRTY=false
+if [[ -n "$(git -C "${REPO_ROOT}" status --porcelain)" ]]; then
+  SOURCE_DIRTY=true
+fi
+echo "Desktop source: ${SOURCE_BRANCH:-detached} @ ${SOURCE_COMMIT} (dirty=${SOURCE_DIRTY})"
+
 HOST_MACHINE="$(uname -m)"
 if [[ "${BUILD_ARCH}" == "arm64" && "${HOST_MACHINE}" != "aarch64" && "${HOST_MACHINE}" != "arm64" ]]; then
   if [[ ! -e /proc/sys/fs/binfmt_misc/qemu-aarch64 ]]; then
@@ -126,6 +144,12 @@ EOF
   exit 127
 fi
 
+if ! "${CTR[@]}" info >/dev/null; then
+  echo "${CTR[*]} is installed, but its container engine is unavailable." >&2
+  echo "Start or connect to the engine, then rerun ./build-appimage.sh from the repository root." >&2
+  exit 69
+fi
+
 IMAGE_NAME="${LINUX_BUILD_IMAGE:-qortal-hub-linux-build:bullseye-${IMAGE_ARCH_TAG}}"
 ROOT_NODE_MODULES_VOLUME="${LINUX_BUILD_ROOT_NODE_MODULES_VOLUME:-qortal-hub-linux-build-root-node-modules-${IMAGE_ARCH_TAG}}"
 ELECTRON_NODE_MODULES_VOLUME="${LINUX_BUILD_ELECTRON_NODE_MODULES_VOLUME:-qortal-hub-linux-build-electron-node-modules-${IMAGE_ARCH_TAG}}"
@@ -141,6 +165,9 @@ echo "Running ${BUILD_ARCH} ${PROFILE_LABEL} build in container…"
   --platform "${CONTAINER_PLATFORM}" \
   -e "QORTAL_LINUX_DOCKER_ARCH=${BUILD_ARCH}" \
   -e "QORTAL_LINUX_DOCKER_PROFILE=${BUILD_PROFILE}" \
+  -e "QORTAL_DESKTOP_SOURCE_BRANCH=${SOURCE_BRANCH:-detached}" \
+  -e "QORTAL_DESKTOP_SOURCE_COMMIT=${SOURCE_COMMIT}" \
+  -e "QORTAL_DESKTOP_SOURCE_DIRTY=${SOURCE_DIRTY}" \
   -v "${REPO_ROOT}:/workspace" \
   -v "${ROOT_NODE_MODULES_VOLUME}:/workspace/node_modules" \
   -v "${ELECTRON_NODE_MODULES_VOLUME}:/workspace/electron/node_modules" \

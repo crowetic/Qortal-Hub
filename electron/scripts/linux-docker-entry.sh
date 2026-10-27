@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Run inside the linux-build container (mounted repo at /workspace).
+# Run inside the linux-build container (normally mounted at /workspace).
 set -euo pipefail
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD_ARCH="${QORTAL_LINUX_DOCKER_ARCH:-x64}"
 BUILD_PROFILE="${QORTAL_LINUX_DOCKER_PROFILE:-full}"
-WORKSPACE_OWNER_UID="$(stat -c %u /workspace)"
-WORKSPACE_OWNER_GID="$(stat -c %g /workspace)"
+WORKSPACE_OWNER_UID="$(stat -c %u "${REPO_ROOT}")"
+WORKSPACE_OWNER_GID="$(stat -c %g "${REPO_ROOT}")"
 
 restore_host_ownership() {
   if [[ ! "${WORKSPACE_OWNER_UID}" =~ ^[0-9]+$ || ! "${WORKSPACE_OWNER_GID}" =~ ^[0-9]+$ ]]; then
@@ -14,12 +15,16 @@ restore_host_ownership() {
   fi
 
   local generated_paths=(
-    /workspace/dist
-    /workspace/electron/build
-    /workspace/electron/dist
-    /workspace/electron/resources/__pycache__
-    /workspace/electron/resources/private-transport
-    /workspace/electron/resources/reticulum
+    "${REPO_ROOT}/dist"
+    "${REPO_ROOT}/public/wallet-dependency-licenses.txt"
+    "${REPO_ROOT}/electron/app"
+    "${REPO_ROOT}/electron/build"
+    "${REPO_ROOT}/electron/dist"
+    "${REPO_ROOT}/electron/.build"
+    "${REPO_ROOT}/electron/src/rt"
+    "${REPO_ROOT}/electron/resources/__pycache__"
+    "${REPO_ROOT}/electron/resources/private-transport"
+    "${REPO_ROOT}/electron/resources/reticulum"
   )
   local existing_paths=()
   local generated_path
@@ -62,21 +67,38 @@ case "${BUILD_ARCH}:${BUILD_PROFILE}" in
     ;;
 esac
 
-cd /workspace
+cd "${REPO_ROOT}"
 
 npm ci
 
 cd electron
 npm ci
+npx --no-install install-electron
 
+# A desktop build always starts with a fresh standard renderer and compiled main
+# process. Do not package stale app/build output left by another branch.
+cd "${REPO_ROOT}"
+rm -rf electron/build
 npm run build
+npx --no-install cap sync @capacitor-community/electron
+if [[ -e electron/app/hub-config.json ]]; then
+  echo "Hosted runtime configuration appeared in the desktop renderer." >&2
+  exit 65
+fi
+
+cd electron
+npm run build
+QORTAL_GO_BINARY="$(command -v go)"
+export QORTAL_GO_BINARY
+"${QORTAL_GO_BINARY}" version
+npm run build:private-transport
 
 # better-sqlite3 13 ships platform prebuilds and loads them before its normal
 # build/Release output. Those upstream Linux binaries may be linked against a
 # newer glibc than this Debian 11 compatibility container. Force a real source
 # build for Electron, then replace the preferred platform prebuild with it.
 echo "Rebuilding better-sqlite3 from source for Linux ${BUILD_ARCH}…"
-npm_config_force_build=1 npx electron-rebuild \
+npm_config_force_build=1 npx --no-install electron-rebuild \
   --force \
   --build-from-source \
   --which-module better-sqlite3 \
@@ -124,7 +146,7 @@ PY
 verify_glibc_baseline "${BETTER_SQLITE3_PREBUILD}" "Rebuilt better-sqlite3"
 
 # Exercise the same prebuild path that better-sqlite3 selects at runtime.
-node - <<'NODE'
+ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/electron - <<'NODE'
 const Database = require('better-sqlite3');
 const database = new Database(':memory:');
 const result = database.prepare('SELECT 1 AS ok').get();
@@ -132,14 +154,17 @@ database.close();
 if (result?.ok !== 1) throw new Error('better-sqlite3 smoke test failed');
 NODE
 
+rm -rf .build/rnsd-frozen
 npm run bundle:reticulum
+verify_glibc_baseline resources/reticulum/rnsd "Frozen rnsd"
+verify_glibc_baseline resources/reticulum/presence_bridge "Frozen presence bridge"
 
 # Snap/rpm are painful inside Docker; AppImage + deb cover most sharing.
 # Use one -c file only: electron-builder merges multiple -c paths incorrectly
 # (only the last path wins as extends), which dropped files/build/** and broke packaging.
 # Pass explicit Linux targets as well so the appimage profile cannot inherit/build deb.
 echo "Packaging profile: ${ARTIFACT_LABEL}"
-npx electron-builder build \
+npx --no-install electron-builder build \
   -c "${BUILDER_CONFIG}" \
   --publish=never \
   "${BUILDER_TARGETS[@]}"
@@ -160,4 +185,5 @@ if [[ ! -f "${PACKAGED_BETTER_SQLITE3}" ]]; then
 fi
 verify_glibc_baseline "${PACKAGED_BETTER_SQLITE3}" "Packaged better-sqlite3"
 
+node scripts/write-desktop-build-receipt.mjs
 echo "Artifacts: electron/dist/ (installers + latest-linux.yml + *.blockmap for auto-update)"
