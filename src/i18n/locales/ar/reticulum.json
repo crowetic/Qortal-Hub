@@ -128,6 +128,14 @@
     "enter_qortal_land": "ادخل إلى Qortal Land",
     "return_to_chat": "العودة إلى المحادثة"
   },
+  "nuqloud": {
+    "no_groups": "انضم إلى مجموعة Qortal لبدء الدردشة.",
+    "request_failed": "تعذّر إكمال طلب الدردشة. تحقّق من حالة الاتصال وحاول مجددًا.",
+    "session_ended": "انتهت جلسة الدردشة. افتح قفل محفظتك أو حدّث الصفحة.",
+    "unsupported": "هذه الميزة غير متاحة في NuQloud بعد.",
+    "waiting": "في انتظار NuQloud…",
+    "your_groups": "مجموعاتك"
+  },
   "onboarding": {
     "find_communities": "اكتشف المجتمعات",
     "invite_error_invalid": "لا يبدو أن هذا رابط دعوة صالح إلى جروب Qortal.",

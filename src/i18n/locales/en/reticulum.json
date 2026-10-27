@@ -128,6 +128,14 @@
     "enter_qortal_land": "Enter Qortal Land",
     "return_to_chat": "Return to Chat"
   },
+  "nuqloud": {
+    "no_groups": "Join a Qortal group to start chatting.",
+    "request_failed": "The chat request could not be completed. Check connection status and try again.",
+    "session_ended": "Your chat session ended. Unlock your wallet or refresh the page.",
+    "unsupported": "This feature is not available in NuQloud yet.",
+    "waiting": "Waiting for NuQloud…",
+    "your_groups": "Your groups"
+  },
   "onboarding": {
     "find_communities": "Find Communities",
     "invite_error_invalid": "This doesn't look like a valid Qortal group invite link.",

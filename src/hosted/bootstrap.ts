@@ -1,3 +1,4 @@
+import { installResources } from './resources';
 import contract from './browser-contract.json';
 import { HostedClient } from './client';
 import i18n from '../i18n/i18n';
@@ -375,77 +376,4 @@ function installFileOffers(client: HostedClient) {
     selected.clear();
     download.clear();
   });
-}
-
-function installResources(client: HostedClient) {
-  const urls = new Map<string, string>();
-  const getUrl = async (hash: string) => {
-    const cached = urls.get(hash);
-    if (cached) return { success: true, url: cached };
-    const status = await client.rpc('resource:getStatus', hash);
-    if (status.manifest?.sizeBytes > 128 * 1024 * 1024)
-      throw new Error(
-        i18n.t('core:message.error.file_too_large', {
-          filename: status.manifest.fileName,
-          size: 128,
-        })
-      );
-    if (!status.complete) return { success: false };
-    const chunks: BlobPart[] = [];
-    for (
-      let offset = 0;
-      offset < status.manifest.sizeBytes;
-      offset += 512 * 1024
-    ) {
-      const { bytes } = await client.rpc('resource:read', hash, offset);
-      chunks.push(bytes);
-    }
-    const url = URL.createObjectURL(
-      new Blob(chunks, { type: status.manifest.mimeType })
-    );
-    urls.set(hash, url);
-    return { success: true, url, manifest: status.manifest };
-  };
-  client.on('presence:cleared', () => {
-    for (const url of urls.values()) URL.revokeObjectURL(url);
-    urls.clear();
-  });
-  (window as any).reticulumResources = {
-    getPathForFile: () => '',
-    importBase64: async (payload: any) => {
-      const binary = atob(String(payload.base64).replace(/^data:[^,]*,/, ''));
-      const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-      const { base64: _, ...metadata } = payload;
-      const id = await client.rpc('upload:begin', {
-        ...metadata,
-        size: bytes.length,
-      });
-      for (let offset = 0; offset < bytes.length; offset += 512 * 1024)
-        await client.rpc(
-          'upload:chunk',
-          id,
-          bytes.subarray(offset, offset + 512 * 1024),
-          offset
-        );
-      return client.rpc('upload:finish', id);
-    },
-    getUrl,
-    getStatus: (hash: string) => client.rpc('resource:getStatus', hash),
-    getStorageStatus: () => client.rpc('resource:getStorageStatus'),
-    cleanupStorage: () => client.rpc('resource:cleanupStorage'),
-    saveAs: async (hash: string, name?: string) => {
-      const result = await getUrl(hash);
-      if (!result.success) return result;
-      const link = document.createElement('a');
-      link.href = result.url;
-      link.download = name || result.manifest?.fileName || hash;
-      link.click();
-      return { success: true };
-    },
-    open: async (hash: string) => {
-      const result = await getUrl(hash);
-      if (result.success) window.open(result.url, '_blank', 'noopener');
-      return result;
-    },
-  };
 }

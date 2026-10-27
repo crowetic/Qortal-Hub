@@ -20,6 +20,8 @@ import {
 import type { DaemonConfig } from './config';
 import { CallManager } from '../../electron/src/call';
 import { GroupCallManager } from '../../electron/src/group-call';
+import { nuqloudAccount } from './nuqloud';
+import { closeNuqloudUploads } from './nuqloud-resources';
 
 export type BrowserSigner = (
   kind: 'presence' | 'chat',
@@ -145,6 +147,7 @@ export class AccountRegistry {
       },
       principal,
       runtime: worker.runtime,
+      nuqloud: nuqloudAccount(worker),
     };
   };
   async close() {
@@ -465,6 +468,14 @@ export class AccountWorker {
     this.members.set(groupId, { at: Date.now(), entries: result.members });
     return result.members as any[];
   }
+  async groupCapabilities(groupId: number) {
+    if (!this.groupIds.includes(groupId))
+      throw new HubApiError(403, 'group_not_allowed');
+    const local = (await this.getMembers(groupId)).find(
+      (entry) => entry.member === this.principal.address
+    );
+    return { groupId, isAdmin: local?.isAdmin === true };
+  }
   async refreshMemberships() {
     if (Date.now() - this.membershipAt < 15_000) return;
     if (this.membershipPending) return this.membershipPending;
@@ -536,9 +547,12 @@ export class AccountWorker {
     this.presence.removeAllListeners();
     this.calls.stop();
     this.groupCalls.stop();
-    this.manager.close();
-    this.resources.close();
-    this.closing = this.bridge.retireAndWait();
+    this.closing = (async () => {
+      await closeNuqloudUploads(this);
+      this.manager.close();
+      this.resources.close();
+      await this.bridge.retireAndWait();
+    })();
     return this.closing;
   }
 }

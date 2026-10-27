@@ -128,6 +128,14 @@
     "enter_qortal_land": "Siirry Qortal Landiin",
     "return_to_chat": "Palaa keskusteluun"
   },
+  "nuqloud": {
+    "no_groups": "Liity Qortal-ryhmään aloittaaksesi keskustelun.",
+    "request_failed": "Keskustelupyyntöä ei voitu suorittaa. Tarkista yhteyden tila ja yritä uudelleen.",
+    "session_ended": "Keskusteluistuntosi päättyi. Avaa lompakkosi lukitus tai päivitä sivu.",
+    "unsupported": "Tämä ominaisuus ei ole vielä käytettävissä NuQloudissa.",
+    "waiting": "Odotetaan NuQloudia…",
+    "your_groups": "Ryhmäsi"
+  },
   "onboarding": {
     "find_communities": "Etsi yhteisöjä",
     "invite_error_invalid": "Tämä ei näytä kelvolliselta Qortal-ryhmän kutsulinkiltä.",

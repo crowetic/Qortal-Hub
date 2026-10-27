@@ -128,6 +128,14 @@
     "enter_qortal_land": "Entra in Qortal Land",
     "return_to_chat": "Torna alla chat"
   },
+  "nuqloud": {
+    "no_groups": "Unisciti a un gruppo Qortal per iniziare a chattare.",
+    "request_failed": "Impossibile completare la richiesta di chat. Controlla lo stato della connessione e riprova.",
+    "session_ended": "La sessione di chat è terminata. Sblocca il portafoglio o aggiorna la pagina.",
+    "unsupported": "Questa funzione non è ancora disponibile in NuQloud.",
+    "waiting": "In attesa di NuQloud…",
+    "your_groups": "I tuoi gruppi"
+  },
   "onboarding": {
     "find_communities": "Trova community",
     "invite_error_invalid": "Questo non sembra un link d'invito a un gruppo Qortal valido.",

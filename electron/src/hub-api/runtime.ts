@@ -107,7 +107,14 @@ export class HubApiRuntime {
   }
 
   async publish(event: ReticulumChatEvent): Promise<void> {
-    this.assertChannel(event.groupId, event.channelId);
+    if (
+      event.eventType.startsWith('channel_') ||
+      event.eventType.startsWith('category_')
+    ) {
+      // A create/restore may name a channel absent from the readable list.
+      // The native manager independently validates the signed mutation and Core admin rights.
+      this.channels(event.groupId);
+    } else this.assertChannel(event.groupId, event.channelId);
     const result = await this.manager.publishEvent(event);
     if (!result.ok) throw new HubApiError(422, 'event_rejected');
   }

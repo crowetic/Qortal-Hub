@@ -12,10 +12,9 @@ const uid = new ShortUniqueId({ length: 8 });
 
 export const useMessageQueue = () => useContext(MessageQueueContext);
 
-export const MessageQueueProvider = ({ children }) => {
+export const MessageQueueProvider = ({ children, maxRetries = 2 }) => {
   const messageQueueRef = useRef([]);
   const [queueChats, setQueueChats] = useState({}); // Stores chats and status for display
-  const maxRetries = 2;
 
   const clearStatesMessageQueueProvider = useCallback(() => {
     setQueueChats({});

@@ -3,3 +3,7 @@ export * from '../../electron/src/reticulum-chat';
 export * from '../../electron/src/reticulum-bridge';
 export * from '../../electron/src/presence';
 export * from '../../electron/src/native-runtime-environment';
+export { HubApiRuntime } from '../../electron/src/hub-api/runtime';
+export { ReticulumResourceStore } from '../../electron/src/reticulum-resource-store';
+export { nuqloudAccount } from './nuqloud';
+export { closeNuqloudUploads } from './nuqloud-resources';

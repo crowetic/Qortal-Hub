@@ -1,0 +1,94 @@
+# NuQloud embedded Q-Chat
+
+The `hosted-access` branch provides `npm run build:nuqloud`, a chat-only browser
+entry for NuQloud. It reuses `ChatGroup`, the message list, TipTap editor and native
+chat services. `src/nuqloud` replaces shell/backend dependencies through the
+specialized Vite configuration. The ordinary desktop and full hosted-browser
+entries keep their existing defaults.
+
+NuQloud owns login, linked-account selection, unlock, permissions and the parent
+frame. External Auth signs constrained native group events; wallet keys and app
+bearers stay on the server. The existing Auth-wallet account worker/database is
+used. This does not provision a hosted-browser installation identity or transfer
+wallet keys into this entry.
+
+## Build and packaging
+
+Node 22.12+ is required. From a clean matching source revision:
+
+```bash
+npm ci --ignore-scripts
+npm ci --prefix daemon
+npm run build:nuqloud
+npm run build --prefix daemon
+```
+
+The renderer outputs `daemon/dist/nuqloud-ui/index.html`, hashed assets and
+`build-info.json`. NuQloud's multi-stage Dockerfile builds this entry and daemon
+from the same source context. Build output stays untracked. `QORTAL_HUB_SOURCE_REVISION`
+can supply provenance where Git metadata is absent; the local build otherwise
+records HEAD. This is source metadata, not an attestation of a clean tree.
+
+The platform defaults new source selections to `hosted-access`. Keep the separate
+`hub-daemon` branch independent. No automatic merge or Hub `main` branch is needed.
+Update the platform, External Auth and Hub together; older combinations retain
+the previous Nextcloud interface through capability negotiation.
+
+## Contract
+
+The daemon advertises `nuqloudChatTransport=1` only when embedded assets exist.
+Updated Auth exposes `sharedChatUI=1` only for that transport. Auth calls these
+wallet-bound endpoints with its existing bearer and wallet header:
+
+- `GET /v1/nuqloud/asset?path=...`: fixed build directory, hash/base64/type, no
+  caller-selected roots, traversal, source maps or symlink escapes.
+- `POST /v1/nuqloud/read`: bounded allowlist of native group queries, subscriptions,
+  read/search/mute state, Core-derived admin capabilities, read-only presence and
+  reference-authorized cached resource reads. Returns `{contractVersion:1,result}`.
+- `POST /v1/nuqloud/write`: the same contract for constrained chunked uploads;
+  `upload:*` is refused on the read route and requires `QCHAT_PUBLISH`.
+
+Publication and sequence reservation/release continue to use the existing leased
+`/v1/groups/:id/sequences` and `/events` routes. The native manager remains the
+authority for group/channel membership, write restrictions, mutation ownership,
+admin metadata and signatures. Auth separately checks read/publish and fresh
+unlock on each operation. Signatures and events are never retried automatically
+by the embedded message queue; default retries for ordinary Hub are unchanged.
+
+Events use a 256-entry/2 MiB ring queue, with bounded poll responses, current
+channel filtering and history repair on overflow. Visible/hidden polling is
+2/10 seconds. Group history pages are capped at 20, and oversized query responses
+fail explicitly. Resource uploads are at most 8 MiB, two per account, in 64 KiB
+chunks; temporary files expire and are cleaned on worker close. Cached resource
+access requires a readable live signed reference or authenticated local upload
+tracking, never an untrusted manifest's ownerId.
+
+The browser bridge checks parent/frame source, same origin, random context and
+expiry. Nextcloud removes the frame on account changes, revocation and expiry.
+It validates asset SHA-256 and injects its CSP nonce. The iframe contains only
+trusted matching-build code; its same-origin sandbox is not a boundary against
+malicious first-party code. Normal Hub content sanitization still applies.
+
+## Initial capability boundary
+
+Group history/send, rich formatting, replies, edits/deletion, reactions, search,
+read/mute state, images/files, channels/categories and verified-admin metadata
+use the original components. A members reader and native presence are available.
+Group discovery/joining uses NuQloud's existing directory and consent flow.
+DMs, calls, calendar and Q-Manager are unavailable. Legacy threads and automatic
+welcome publications are disabled. The native wire protocol/history are retained.
+
+## Verification
+
+```bash
+node node_modules/vitest/vitest.mjs run electron/src/hub-api/nuqloud.test.ts src/hosted/client.test.ts src/hosted/HostedConnectionNotice.test.tsx
+QORTAL_EXTERNAL_AUTH_REPO=/path/to/Qortal-External-Auth node --test daemon/test/headless.test.cjs
+```
+
+The headless test requires built Auth, compiled embedded assets and the daemon's
+Python environment. It tests real Auth/Hub HTTP, new RPC/sign/assets, consumed
+lease rejection, two isolated Reticulum account stores, restart and revocation.
+No public Reticulum interfaces are enabled. The companion platform test
+`scripts/test-qchat-shared-ui.cjs` runs the real compiled UI/parent bridge and
+native signer/SQLite/resources; its engineering plan documents setup and rollout.
+Use the owner's existing lifecycle for deployment and retain all history/data.

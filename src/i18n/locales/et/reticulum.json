@@ -128,6 +128,14 @@
     "enter_qortal_land": "Sisene Qortal Landi",
     "return_to_chat": "Tagasi vestlusesse"
   },
+  "nuqloud": {
+    "no_groups": "Vestlemise alustamiseks liitu Qortali grupiga.",
+    "request_failed": "Vestluspäringut ei saanud lõpule viia. Kontrolli ühenduse olekut ja proovi uuesti.",
+    "session_ended": "Sinu vestlusseanss lõppes. Ava rahakott või värskenda lehte.",
+    "unsupported": "See funktsioon pole NuQloudis veel saadaval.",
+    "waiting": "NuQloudi ootel…",
+    "your_groups": "Sinu grupid"
+  },
   "onboarding": {
     "find_communities": "Leia kogukondi",
     "invite_error_invalid": "See ei tundu olevat kehtiv Qortali rühma kutselink.",

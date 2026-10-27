@@ -310,8 +310,11 @@ async function resource(worker: AccountWorker, action: string, args: any[]) {
     };
   }
   if (action === 'read') {
+    const length = args[2] ?? 512 * 1024;
+    if (!Number.isSafeInteger(length) || length < 1 || length > 512 * 1024)
+      throw new Error('invalid_range');
     const start = args[1],
-      end = Math.min(manifest.sizeBytes, start + 512 * 1024);
+      end = Math.min(manifest.sizeBytes, start + length);
     if (!Number.isSafeInteger(start) || start < 0 || start > manifest.sizeBytes)
       throw new Error('invalid_range');
     const range = await store.readByteRangeAsync(hash, start, end);

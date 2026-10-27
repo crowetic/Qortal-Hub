@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "build:nuqloud": "vite build --config vite.nuqloud.config.ts",
     "build": "node electron/scripts/build-wallet-engine.mjs && node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
     "coverage": "vitest run --coverage",
     "dev": "vite",

@@ -128,6 +128,14 @@
     "enter_qortal_land": "Qortal Landに入る",
     "return_to_chat": "チャットに戻る"
   },
+  "nuqloud": {
+    "no_groups": "Qortalグループに参加してチャットを始めましょう。",
+    "request_failed": "チャットのリクエストを完了できませんでした。接続状態を確認して、もう一度お試しください。",
+    "session_ended": "チャットセッションが終了しました。ウォレットのロックを解除するか、ページを更新してください。",
+    "unsupported": "この機能はNuQloudではまだ利用できません。",
+    "waiting": "NuQloudを待っています…",
+    "your_groups": "参加グループ"
+  },
   "onboarding": {
     "find_communities": "コミュニティを探す",
     "invite_error_invalid": "これは有効なQortalグループの招待リンクではないようです。",

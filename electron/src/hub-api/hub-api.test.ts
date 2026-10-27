@@ -476,13 +476,25 @@ describe('Hub Q-Chat HTTP API', () => {
     expect((await f.post('/v1/groups/716/sequences', {})).status).toBe(503);
     expect(f.manager.releaseAuthorSequence).toHaveBeenCalledOnce();
   });
-  it('rejects oversized bodies and unsupported metadata events', async () => {
+  it('routes new-channel metadata through the same native validation and sequence lease', async () => {
+    const f = await fixture();
+    const metadata = event({
+      eventType: 'channel_create',
+      channelId: 'new-channel',
+    });
+    expect((await f.post('/v1/groups/716/events', metadata)).status).toBe(409);
+    expect((await f.post('/v1/groups/716/sequences', {})).status).toBe(201);
+    expect((await f.post('/v1/groups/716/events', metadata)).status).toBe(202);
+    expect(f.manager.publishEvent).toHaveBeenCalledWith(metadata);
+    expect((await f.post('/v1/groups/716/events', metadata)).status).toBe(409);
+  });
+  it('rejects oversized bodies and unsupported protocol event types', async () => {
     const f = await fixture();
     expect(
       (
         await f.post(
           '/v1/groups/716/events',
-          event({ eventType: 'channel_update' })
+          event({ eventType: 'unsupported_event' })
         )
       ).status
     ).toBe(400);

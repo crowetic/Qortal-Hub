@@ -13877,6 +13877,27 @@ export class ReticulumChatManager extends EventEmitter {
     return result;
   }
 
+  /** Server adapters may expose cached bytes only while their signed reference is readable. */
+  canReadGroupResourceReference(
+    groupId: number,
+    eventId: string,
+    fileHash: string
+  ): boolean {
+    try {
+      this.assertLocalGroupMember(groupId);
+      const event = this.db.getEvent(eventId);
+      return (
+        !!event &&
+        event.groupId === groupId &&
+        this.localChannelReadPredicate(groupId)(event.channelId) &&
+        this.resourceStore?.hasLiveReference(fileHash, 'group', groupId, eventId) ===
+          true
+      );
+    } catch {
+      return false;
+    }
+  }
+
   async requestResource(
     groupId: number,
     manifest: ReticulumResourceManifest,

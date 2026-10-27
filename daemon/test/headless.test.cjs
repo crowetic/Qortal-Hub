@@ -245,6 +245,103 @@ test(
           throw new Error(`Message did not reach second account\n${hubOutput}`);
         await delay(500);
       }
+      // Exercise the embedded contract through real Auth HTTP and leased Hub
+      // endpoints, independently of the browser fixture's direct native calls.
+      const sharedRequest = async (requestType, payload) =>
+        (
+          await post(
+            '/qortal/request',
+            {
+              requestType,
+              payload: {
+                walletId: wallets[0].walletId,
+                ...payload,
+              },
+            },
+            token
+          )
+        ).result;
+      const rpc = async (method, args) => {
+        const response = await sharedRequest('HUB_CHAT_RPC', { method, args });
+        assert.equal(response.contractVersion, 1);
+        return response.result;
+      };
+      const page = await rpc('getMessageHistoryPage', [716, 'general', 20]);
+      const original = page.events.find(
+        (event) => event.eventId === sent.eventId
+      );
+      assert.ok(original, 'shared RPC must read the existing wallet history');
+      const reservation = await rpc('reserveAuthorSequence', [
+        716,
+        wallets[0].address0,
+      ]);
+      const unsigned = {
+        eventId: require('node:crypto').randomUUID(),
+        groupId: 716,
+        channelId: 'general',
+        eventType: 'message',
+        authorStreamId: reservation.authorStreamId,
+        authorSeq: reservation.authorSeq,
+        timestamp: Date.now(),
+        targetEventId: null,
+        replyToEventId: null,
+        encryptedPayload: original.encryptedPayload,
+        payloadHash: original.payloadHash,
+        mentionAddressHashes: [],
+      };
+      const signed = {
+        ...unsigned,
+        ...(await sharedRequest('SIGN_HUB_CHAT_EVENT', { event: unsigned })),
+      };
+      assert.ok(signed.signature);
+      assert.equal((await rpc('publishEvent', [signed])).accepted, true);
+      const replay = await fetch(`${authUrl}/qortal/request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          requestType: 'HUB_CHAT_RPC',
+          payload: {
+            walletId: wallets[0].walletId,
+            method: 'publishEvent',
+            args: [signed],
+          },
+        }),
+      });
+      assert.equal(
+        replay.ok,
+        false,
+        'a consumed sequence lease must reject a transport replay'
+      );
+      const ownHistory = await rpc('getMessageHistoryPage', [
+        716,
+        'general',
+        20,
+      ]);
+      assert.equal(
+        ownHistory.events.filter((event) => event.eventId === signed.eventId)
+          .length,
+        1
+      );
+      const hasEmbeddedUI = fs.existsSync(
+        path.join(root, 'dist/nuqloud-ui/index.html')
+      );
+      assert.equal(
+        (await get('/hub/status', wallets[0])).sharedChatUI,
+        hasEmbeddedUI ? 1 : 0
+      );
+      if (hasEmbeddedUI) {
+        const asset = await sharedRequest('GET_HUB_CHAT_UI', {
+          path: 'index.html',
+        });
+        assert.equal(asset.contractVersion, 1);
+        assert.match(
+          Buffer.from(asset.data, 'base64').toString(),
+          /assets\/nuqloud-/
+        );
+      }
       // Independent files prove receipt did not come from a shared local chat DB.
       const accounts = fs.readdirSync(
         path.join(env.QORTAL_HUB_DATA_DIR, 'accounts')

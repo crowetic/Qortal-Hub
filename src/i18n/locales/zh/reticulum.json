@@ -128,6 +128,14 @@
     "enter_qortal_land": "进入 Qortal Land",
     "return_to_chat": "返回聊天"
   },
+  "nuqloud": {
+    "no_groups": "加入Qortal群组以开始聊天。",
+    "request_failed": "无法完成聊天请求。请检查连接状态后重试。",
+    "session_ended": "聊天会话已结束。请解锁钱包或刷新页面。",
+    "unsupported": "NuQloud暂不支持此功能。",
+    "waiting": "正在等待NuQloud…",
+    "your_groups": "你的群组"
+  },
   "onboarding": {
     "find_communities": "寻找社区",
     "invite_error_invalid": "这似乎不是有效的 Qortal 群组邀请链接。",

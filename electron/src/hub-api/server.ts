@@ -26,6 +26,14 @@ const MESSAGE_TYPES = new Set([
   'delete',
   'reaction_add',
   'reaction_remove',
+  'channel_create',
+  'channel_update',
+  'channel_archive',
+  'channel_restore',
+  'channel_reorder',
+  'category_create',
+  'category_update',
+  'category_delete',
 ]);
 
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -75,6 +83,11 @@ export type HubAccountResolver = (
   config: HubApiConfig;
   principal: HubApiPrincipal;
   runtime: HubApiRuntime;
+  nuqloud?: {
+    available: boolean;
+    request(body: Record<string, any>): Promise<unknown>;
+    asset(name: string): Promise<unknown>;
+  };
 }>;
 
 type Lease = {
@@ -147,10 +160,14 @@ export async function startHubApi(
     if (!['GET', 'POST'].includes(request.method || ''))
       throw new HubApiError(405, 'method_not_allowed');
     const requestedWallet = request.headers['x-qortal-hub-wallet-id'];
-    const scope = request.method === 'POST' ? 'QCHAT_PUBLISH' : 'QCHAT_READ';
+    const scope =
+      request.method === 'POST' && url.pathname !== '/v1/nuqloud/read'
+        ? 'QCHAT_PUBLISH'
+        : 'QCHAT_READ';
     let accountConfig = config;
     let principal: HubApiPrincipal;
     let runtime: HubApiRuntime;
+    let nuqloud: Awaited<ReturnType<HubAccountResolver>>['nuqloud'];
     if (resolveAccount) {
       if (
         typeof requestedWallet !== 'string' ||
@@ -162,6 +179,7 @@ export async function startHubApi(
       accountConfig = account.config;
       principal = account.principal;
       runtime = account.runtime;
+      nuqloud = account.nuqloud;
     } else {
       principal = await authorize(token, scope);
       if (principal.address !== config.address)
@@ -172,6 +190,35 @@ export async function startHubApi(
     }
     response.setHeader('X-Qortal-Hub-Wallet-Id', accountConfig.walletId);
     runtime.assertAccount();
+    if (
+      request.method === 'GET' &&
+      url.pathname === '/v1/nuqloud/asset' &&
+      nuqloud
+    ) {
+      json(
+        response,
+        200,
+        await nuqloud.asset(url.searchParams.get('path') || 'index.html')
+      );
+      return;
+    }
+    if (
+      request.method === 'POST' &&
+      ['/v1/nuqloud/read', '/v1/nuqloud/write'].includes(url.pathname) &&
+      nuqloud
+    ) {
+      const body = await readJson(request);
+      if (
+        String(body.method).startsWith('upload:') &&
+        scope !== 'QCHAT_PUBLISH'
+      )
+        throw new HubApiError(403, 'scope_required');
+      json(response, 200, {
+        contractVersion: 1,
+        result: await nuqloud.request(body),
+      });
+      return;
+    }
     if (request.method === 'GET' && url.pathname === '/v1/status') {
       json(response, 200, {
         apiVersion: 1,
@@ -180,6 +227,7 @@ export async function startHubApi(
         walletId: accountConfig.walletId,
         groupIds: accountConfig.groupIds,
         reticulum: runtime.transportStatus(),
+        ...(nuqloud ? { nuqloudChatTransport: nuqloud.available ? 1 : 0 } : {}),
       });
       return;
     }

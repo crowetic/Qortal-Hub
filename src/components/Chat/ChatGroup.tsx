@@ -1371,6 +1371,12 @@ export const ChatGroup = ({
   reticulumCalendarTarget = null,
   onReticulumCalendarOpenChange,
   isGroupOwner = false,
+  embeddedCapabilities = {
+    calendar: true,
+    resources: true,
+    manager: true,
+    autoWelcome: true,
+  },
 }) => {
   const userInfo = useAtomValue(userInfoAtom);
   const balance = useAtomValue(balanceAtom);
@@ -4445,7 +4451,8 @@ export const ChatGroup = ({
       !reticulumMemberRolesReadyForSelectedGroup ||
       !myAddress ||
       !Number.isInteger(groupId) ||
-      groupId <= 0
+      groupId <= 0 ||
+      !embeddedCapabilities.autoWelcome
     ) {
       return;
     }
@@ -4582,6 +4589,7 @@ export const ChatGroup = ({
     reticulumMemberRolesReadyForSelectedGroup,
     selectedGroup,
     selectedGroupName,
+    embeddedCapabilities.autoWelcome,
   ]);
 
   const sendChatGroup = async ({
@@ -9499,15 +9507,16 @@ export const ChatGroup = ({
                   disabled: groupCallDisabled || groupCallJoining,
                   tooltip: groupCallTooltip || t('group:chat_group.group_call'),
                 })}
-                {renderReticulumHeaderAction({
-                  active: reticulumCalendarOpen,
-                  label: t('core:calendar.title', t('core:calendar.title')),
-                  icon: <CalendarMonthRoundedIcon sx={{ fontSize: 19 }} />,
-                  onClick: () => {
-                    setActiveReticulumCalendarTarget(null);
-                    setReticulumCalendarOpen((current) => !current);
-                  },
-                })}
+                {embeddedCapabilities.calendar &&
+                  renderReticulumHeaderAction({
+                    active: reticulumCalendarOpen,
+                    label: t('core:calendar.title', t('core:calendar.title')),
+                    icon: <CalendarMonthRoundedIcon sx={{ fontSize: 19 }} />,
+                    onClick: () => {
+                      setActiveReticulumCalendarTarget(null);
+                      setReticulumCalendarOpen((current) => !current);
+                    },
+                  })}
                 {legacyThreadsEnabled && (
                   <>
                     {renderReticulumHeaderAction({
@@ -9523,12 +9532,13 @@ export const ChatGroup = ({
                     })}
                   </>
                 )}
-                {renderReticulumHeaderAction({
-                  active: isOpenQManager === true,
-                  label: 'Q-Manager',
-                  icon: <FolderRoundedIcon sx={{ fontSize: 19 }} />,
-                  onClick: toggleQManager,
-                })}
+                {embeddedCapabilities.manager &&
+                  renderReticulumHeaderAction({
+                    active: isOpenQManager === true,
+                    label: 'Q-Manager',
+                    icon: <FolderRoundedIcon sx={{ fontSize: 19 }} />,
+                    onClick: toggleQManager,
+                  })}
                 <Tooltip
                   title={
                     membersPanelOpen
@@ -10115,8 +10125,12 @@ export const ChatGroup = ({
                       isFocusedParent={isFocusedParent}
                       setIsFocusedParent={setIsFocusedParent}
                       membersWithNames={members}
-                      insertImage={insertImage}
-                      insertFiles={insertFiles}
+                      insertImage={
+                        embeddedCapabilities.resources ? insertImage : undefined
+                      }
+                      insertFiles={
+                        embeddedCapabilities.resources ? insertFiles : undefined
+                      }
                       compactChat={reticulumChatEnabled}
                       collapseFormattingTraySignal={formattingTrayResetKey}
                       placeholder={
