@@ -48,6 +48,15 @@ Native `electron:start` remains available for development with its own tools.
 Packaging for other targets lives in `electron/`: `electron:make-win`,
 `electron:make-mac`, `electron:make-lin-docker`, `electron:make-arm-docker`.
 
+For regular Windows/macOS **test releases**, prefer root `build-windows.ps1` or
+`build-macos.sh` / `npm run build:test-release`. These prepare the renderer and
+both npm projects, select matching native payloads, require explicit signing
+modes, disable publishing/update feeds and write a completion receipt. Use a
+matching native host; `--dry-run` is configuration inspection only. Read
+`docs/test-releases.md`. The manual `Desktop test releases` Actions workflow
+builds unsigned Windows x64 and macOS x64/arm64 artifacts from `main`; it does
+not publish a release or deploy. Keep hosted/daemon packaging on their branches.
+
 There is no typecheck script; `tsc` runs via `vite-plugin-checker` during dev.
 
 ## Layout

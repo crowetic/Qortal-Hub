@@ -288,6 +288,13 @@ def freeze_target(
         "cryptography.hazmat.backends.openssl.backend",
         entry_script,
     ]
+    identity = os.environ.get("QORTAL_RETICULUM_CODESIGN_IDENTITY")
+    if identity:
+        if sys.platform != "darwin" or not identity.startswith("Developer ID Application: "):
+            sys.exit("Frozen runtime signing requires macOS and a Developer ID Application identity")
+        # Sign embedded libraries before sealing the onefile archive; a later
+        # codesign of the outer executable cannot reach these libraries.
+        cmd[-1:-1] = ["--codesign-identity", identity]
     print("Running:", " ".join(cmd))
     run(cmd, env_extra=PIP_ENV, cwd=pi_work)
 

@@ -160,8 +160,13 @@ compatibility baseline:
 
 - Linux x64: `npm run electron:make-lin-docker` or `npm run electron:make-lin-docker-appimage`
 - Linux arm64: `npm run electron:make-arm-docker` or `npm run electron:make-arm-docker-appimage`
-- macOS: `npm run electron:make-mac`
-- Windows: `npm run electron:make-win`
+- macOS test releases: root `./build-macos.sh --signing unsigned`
+- Windows test releases: root `.\build-windows.ps1` (PowerShell)
+
+The test-release wrappers install both npm projects, rebuild/sync the renderer,
+bundle native runtimes and disable publishing. Use the matching OS and
+architecture. For certificate signing, optional macOS notarization, artifact
+receipts and native GitHub runners, see [desktop test releases](test-releases.md).
 
 Linux arm64 Docker builds from a non-arm64 host require QEMU/binfmt arm64 emulation on the host.
 

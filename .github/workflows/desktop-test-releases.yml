@@ -1,0 +1,70 @@
+name: Desktop test releases
+
+# Manual builds only. No tags, GitHub Releases, signing secrets or deployment.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Native target to build
+        type: choice
+        default: all
+        options: [all, windows-x64, macos-x64, macos-arm64]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.target }} unsigned
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x64
+            os: windows-2022
+            platform: win
+            arch: x64
+          - target: macos-x64
+            os: macos-15-intel
+            platform: mac
+            arch: x64
+          - target: macos-arm64
+            os: macos-15
+            platform: mac
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        if: inputs.target == 'all' || inputs.target == matrix.target
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        if: inputs.target == 'all' || inputs.target == matrix.target
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        if: inputs.target == 'all' || inputs.target == matrix.target
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.arch }}
+      - uses: actions/setup-go@v5
+        if: inputs.target == 'all' || inputs.target == matrix.target
+        with:
+          go-version-file: electron/native/private-transport/go.mod
+          cache: false
+      - name: Build and verify native unsigned test package
+        if: inputs.target == 'all' || inputs.target == matrix.target
+        run: node build-test-release.mjs --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --signing unsigned
+      - uses: actions/upload-artifact@v4
+        if: success() && (inputs.target == 'all' || inputs.target == matrix.target)
+        with:
+          name: Qortal-Hub-test-${{ matrix.target }}-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            electron/dist/test-releases/*/*/Qortal-Hub-test-*.exe
+            electron/dist/test-releases/*/*/Qortal-Hub-test-*.dmg
+            electron/dist/test-releases/*/*/Qortal-Hub-test-*.zip
+            electron/dist/test-releases/*/*/desktop-build.json

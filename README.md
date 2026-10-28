@@ -66,4 +66,8 @@ fresh renderer build and Capacitor sync inside Docker. Outputs and build
 provenance are written to `electron/dist/`. Docker supplies the desktop Go
 transport compiler and Reticulum build tools.
 
+For Windows and macOS test packages, use `build-windows.ps1` or
+`build-macos.sh`. See [desktop test releases](./docs/test-releases.md) for native
+host requirements, signed/unsigned builds and the manual Actions workflow.
+
 See the dedicated page for [development](./docs/development.md).
