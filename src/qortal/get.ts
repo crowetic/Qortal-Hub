@@ -5,6 +5,7 @@ import {
 import { getSigningContextRevision } from '../utils/chromeStorage';
 import { fundLocalTrades, localTradeCoins } from './local-trade-funding';
 import { sendLocalForeignCoin } from './foreign-coin-send';
+import { pirateWalletResult } from './pirate-wallet-response';
 import { Sha256 } from 'asmcrypto.js';
 import {
   createEndpoint,
@@ -2014,6 +2015,20 @@ export const checkArrrSyncStatus = async (seed) => {
       res = await response.text();
     }
 
+    res = pirateWalletResult(
+      res,
+      response.ok,
+      i18n.t('question:message.error.fetch_wallet', {
+        postProcess: 'capitalizeFirstChar',
+      })
+    );
+    if (typeof res !== 'string') {
+      throw new Error(
+        i18n.t('question:message.error.fetch_wallet', {
+          postProcess: 'capitalizeFirstChar',
+        })
+      );
+    }
     if (res.indexOf('<') > -1 || res !== 'Synchronized') {
       // Wait 2 seconds before trying again
       await new Promise((resolve) =>
@@ -5825,19 +5840,19 @@ export const sendCoin = async (data, isFromExtension) => {
         },
         body: JSON.stringify(opts),
       });
-      if (!response.ok)
-        throw new Error(
-          i18n.t('question:message.error.send', {
-            postProcess: 'capitalizeFirstChar',
-          })
-        );
       let res;
       try {
         res = await response.clone().json();
       } catch (e) {
         res = await response.text();
       }
-      return res;
+      return pirateWalletResult(
+        res,
+        response.ok,
+        i18n.t('question:message.error.send', {
+          postProcess: 'capitalizeFirstChar',
+        })
+      );
     } else {
       throw new Error(
         i18n.t('question:message.generic.user_declined_request', {

@@ -91,12 +91,18 @@ import { sendLocalForeignCoin } from '../foreign-coin-send';
 
 // ── Imports (after mocks) ────────────────────────────────────────────────────
 
-import { createBuyOrder, createSellOrder, sendCoin } from '../get';
+import {
+  checkArrrSyncStatus,
+  createBuyOrder,
+  createSellOrder,
+  sendCoin,
+} from '../get';
 import { isRunningGateway } from '../qortal-requests';
 import {
   createEndpoint,
   createBuyOrderTx,
   getKeyPair,
+  getSaveWallet,
 } from '../../background/background';
 import { simulatePermission } from './common';
 
@@ -116,6 +122,71 @@ const DEFAULT_AT_DATA = {
 // getBuyingFees divides by QORT_DECIMALS (1e8) to get the displayed amount.
 const UNLOCK_FEE_SATS = 50_000; // 0.0005 LTC
 const LOCK_FEE_SATS = 1_000; // 0.00001 LTC
+
+describe('ARRR Core error propagation', () => {
+  const nativeError =
+    'ERR_RESCAN_REQUIRED: Wallet requires a full rescan before spending.';
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(isRunningGateway).mockResolvedValue(false);
+    vi.mocked(createEndpoint).mockImplementation(async (path) => path);
+    vi.mocked(getSaveWallet).mockResolvedValue({
+      address0: 'public-test-address',
+    } as never);
+    vi.mocked(getKeyPair).mockResolvedValue({
+      arrrSeed58: 'public-test-entropy',
+    } as never);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([400, 200])(
+    'preserves the Core send error (HTTP %s) without retrying',
+    async (status) => {
+      const request = vi.fn(async (url: string) => {
+        if (url.endsWith('/syncstatus')) return new Response('Synchronized');
+        if (url.endsWith('/walletbalance')) return new Response('1000000000');
+        if (url.endsWith('/send'))
+          return new Response(
+            JSON.stringify({ error: 1205, message: nativeError }),
+            { status }
+          );
+        throw new Error('Unexpected test request');
+      });
+      vi.stubGlobal('fetch', request);
+      simulatePermission(true);
+      await expect(
+        sendCoin(
+          {
+            coin: 'ARRR',
+            recipient: 'pirate1public-test-recipient',
+            amount: '1',
+          },
+          false
+        )
+      ).rejects.toThrow(nativeError);
+      expect(
+        request.mock.calls.filter(([url]) => url.endsWith('/send'))
+      ).toHaveLength(1);
+    }
+  );
+
+  it('preserves sync-status API errors before a payment is submitted', async () => {
+    const request = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 1205,
+          message: 'Wallet busy. Please try again later.',
+        }),
+        { status: 503 }
+      )
+    );
+    vi.stubGlobal('fetch', request);
+    await expect(checkArrrSyncStatus('public-test-entropy')).rejects.toThrow(
+      'Wallet busy. Please try again later.'
+    );
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('sendCoin on public nodes', () => {
   afterEach(() => vi.clearAllMocks());
