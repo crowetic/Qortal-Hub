@@ -10,12 +10,8 @@ import { saveFile } from '../qortal/get';
 import { mimeToExtensionMap } from '../utils/memeTypes';
 import FileSaver from 'file-saver';
 import { useAtomValue, useSetAtom } from 'jotai';
-import {
-  QORTAL_PROTOCOL,
-  TIME_HOURS_1_IN_MILLISECONDS,
-  TIME_MINUTES_30_IN_MILLISECONDS,
-  TIME_SECONDS_30_IN_MILLISECONDS,
-} from '../constants/constants';
+import { QORTAL_PROTOCOL } from '../constants/constants';
+import { qappRequestTimeout } from '../qortal/qapp-request-timeout';
 import { buildQortalResourceLink } from '../utils/qortalLink';
 import {
   dispatchQAppReticulumRequest,
@@ -735,17 +731,7 @@ export const useQortalMessageListener = (
       const sendMessageToRuntime = (message, eventPort) => {
         if (!eventPort) return;
 
-        let timeout: number = TIME_SECONDS_30_IN_MILLISECONDS;
-        if (
-          message?.action === 'PUBLISH_MULTIPLE_QDN_RESOURCES' &&
-          message?.payload?.resources?.length > 0
-        ) {
-          timeout =
-            message?.payload?.resources?.length *
-            TIME_MINUTES_30_IN_MILLISECONDS;
-        } else if (message?.action === 'PUBLISH_QDN_RESOURCE') {
-          timeout = TIME_HOURS_1_IN_MILLISECONDS;
-        }
+        const timeout = qappRequestTimeout(message);
 
         // Build deduplication key for read-only actions
         const isDeduplicable = deduplicableActions.has(message?.action);
