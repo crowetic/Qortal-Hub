@@ -116,6 +116,11 @@ the dependency layers automatically. Host APT configuration is unaffected.
 
 The Go sidecar provides the regular desktop app's QUIC/MASQUE transport. It is
 also shared by other Hub variants; using Go does not select a hosted build.
+Its compiler uses `-buildvcs=false` because Git metadata inspection can fail on
+container bind mounts with a different owner. Source branch, commit and dirty
+state remain recorded in `electron/dist/desktop-build.json`. If an older build
+stops at `error obtaining VCS status`, pull the latest `develop` and rerun the
+normal build command.
 
 The build refuses `hosted-access` / `hub-daemon` branches and tracked hosted
 runtime code. It prints the actual branch, commit and dirty state. An unavailable
