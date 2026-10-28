@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { useEffect, useState } from 'react';
-import { Provider, createStore } from 'jotai';
+import { Provider, createStore, useStore } from 'jotai';
 import {
   Box,
   Button,
@@ -41,8 +41,11 @@ import { subscribeToEvent, unsubscribeFromEvent } from '../utils/events';
 import i18n from '../i18n/i18n';
 import '../styles/index.css';
 import './style.css';
+import { connectPresence } from './presence';
 
 function Chat() {
+  const store = useStore();
+  useEffect(() => connectPresence(store, (window as any).presence), [store]);
   const { t } = useTranslation(['reticulum', 'group', 'core']);
   const [groupId, setGroupId] = useState(configuration.groups[0]?.groupId || 0);
   const [notice, setNotice] = useState('');

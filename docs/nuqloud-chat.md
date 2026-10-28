@@ -78,10 +78,19 @@ Group discovery/joining uses NuQloud's existing directory and consent flow.
 DMs, calls, calendar and Q-Manager are unavailable. Legacy threads and automatic
 welcome publications are disabled. The native wire protocol/history are retained.
 
+The embedded entry loads the account daemon's verified presence snapshot and
+subscribes to its updates, feeding the same Jotai online/status atoms as Hub's
+ordinary shell. Online, Busy, Idle and Offline badges therefore follow native
+presence rather than remaining at the default Offline. The daemon owns the
+account announcement/heartbeat; this reader creates no second presence session.
+Poll overflow or reconnection reloads the snapshot. A transport failure,
+invalidation or unmount clears the badges, and late snapshots cannot restore
+the old account's status.
+
 ## Verification
 
 ```bash
-node node_modules/vitest/vitest.mjs run electron/src/hub-api/nuqloud.test.ts src/hosted/client.test.ts src/hosted/HostedConnectionNotice.test.tsx
+node node_modules/vitest/vitest.mjs run src/nuqloud/presence.test.ts src/atoms/presence.test.ts electron/src/hub-api/nuqloud.test.ts src/hosted/client.test.ts src/hosted/HostedConnectionNotice.test.tsx
 QORTAL_EXTERNAL_AUTH_REPO=/path/to/Qortal-External-Auth node --test daemon/test/headless.test.cjs
 ```
 

@@ -26,6 +26,7 @@ const listeners = new Map<string, Set<(payload: any) => void>>();
 const subscriptions = new Map<string, [number, string]>();
 let cursor = 0;
 let stopped = false;
+let disconnected = false;
 let timer: ReturnType<typeof setTimeout>;
 let onInvalidate = () => {};
 
@@ -113,6 +114,8 @@ async function poll() {
     if (stopped) return;
     cursor = result.cursor;
     for (const event of result.events ?? []) emit(event.channel, event.payload);
+    if (result.resync || disconnected) emit('presence:resync', undefined);
+    disconnected = false;
     if (result.resync) {
       for (const [groupId, channelId] of subscriptions.values()) {
         const page = await rpc('getMessageHistoryPage', [
@@ -126,7 +129,11 @@ async function poll() {
       }
     }
   } catch (error) {
-    if (!stopped) emit('onConnectionError', error);
+    if (!stopped) {
+      disconnected = true;
+      emit('presence:cleared', undefined);
+      emit('onConnectionError', error);
+    }
   } finally {
     if (!stopped) timer = setTimeout(poll, document.hidden ? 10000 : 2000);
   }
@@ -227,6 +234,8 @@ export function initializeBridge(
             onChatEvent('onPresenceUpdate', (payload) => callback([payload])),
           onCleared: (callback: () => void) =>
             onChatEvent('presence:cleared', callback),
+          onResync: (callback: () => void) =>
+            onChatEvent('presence:resync', callback),
         };
         installResources(
           { rpc: (channel, ...args) => rpc(channel, args), on: onChatEvent },
