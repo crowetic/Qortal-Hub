@@ -1,5 +1,9 @@
 # Desktop test releases
 
+For Linux-controlled Windows Docker/Wine builds and the Docker controller for
+native Mac runners, see [Docker cross-builds](docker-cross-builds.md). Those
+instructions include the GitHub default-branch registration prerequisite.
+
 Use the regular desktop `main` branch. `hosted-access` and `hub-daemon` have
 separate packaging and are rejected by this builder. No server deployment is
 involved. The scripts never publish a GitHub Release or configure a production

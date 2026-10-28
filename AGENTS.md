@@ -57,6 +57,14 @@ matching native host; `--dry-run` is configuration inspection only. Read
 builds unsigned Windows x64 and macOS x64/arm64 artifacts from `main`; it does
 not publish a release or deploy. Keep hosted/daemon packaging on their branches.
 
+Linux-controlled test builds use `./build-cross-docker.sh`: `win` is an
+experimental local Docker/Wine11 cross-build; `mac --arch x64|arm64` controls
+native Mac GitHub runners, not local macOS compilation. Read
+`docs/docker-cross-builds.md` for verification status and workflow registration
+requirements. Preserve existing artifacts and require a verified completion
+receipt before calling a build successful. Docker unavailable is a blocker;
+do not change host services or GitHub default-branch settings implicitly.
+
 There is no typecheck script; `tsc` runs via `vite-plugin-checker` during dev.
 
 ## Layout

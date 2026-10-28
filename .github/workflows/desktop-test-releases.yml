@@ -1,4 +1,5 @@
 name: Desktop test releases
+run-name: Desktop test releases ${{ inputs.target }} ${{ inputs.request_id }}
 
 # Manual builds only. No tags, GitHub Releases, signing secrets or deployment.
 on:
@@ -8,7 +9,11 @@ on:
         description: Native target to build
         type: choice
         default: all
-        options: [all, windows-x64, macos-x64, macos-arm64]
+        options: [all, windows-x64, windows-docker-x64, macos-x64, macos-arm64]
+      request_id:
+        description: Optional controller correlation ID
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -25,6 +30,11 @@ jobs:
             os: windows-2022
             platform: win
             arch: x64
+          - target: windows-docker-x64
+            os: ubuntu-22.04
+            platform: win
+            arch: x64
+            mode: docker
           - target: macos-x64
             os: macos-15-intel
             platform: mac
@@ -45,18 +55,21 @@ jobs:
         with:
           node-version: '22'
       - uses: actions/setup-python@v5
-        if: inputs.target == 'all' || inputs.target == matrix.target
+        if: matrix.mode != 'docker' && (inputs.target == 'all' || inputs.target == matrix.target)
         with:
           python-version: '3.12'
           architecture: ${{ matrix.arch }}
       - uses: actions/setup-go@v5
-        if: inputs.target == 'all' || inputs.target == matrix.target
+        if: matrix.mode != 'docker' && (inputs.target == 'all' || inputs.target == matrix.target)
         with:
           go-version-file: electron/native/private-transport/go.mod
           cache: false
       - name: Build and verify native unsigned test package
-        if: inputs.target == 'all' || inputs.target == matrix.target
+        if: matrix.mode != 'docker' && (inputs.target == 'all' || inputs.target == matrix.target)
         run: node build-test-release.mjs --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --signing unsigned
+      - name: Cross-build and verify Windows package in Docker/Wine
+        if: matrix.mode == 'docker' && (inputs.target == 'all' || inputs.target == matrix.target)
+        run: ./build-cross-docker.sh win
       - uses: actions/upload-artifact@v4
         if: success() && (inputs.target == 'all' || inputs.target == matrix.target)
         with:

@@ -70,4 +70,8 @@ For Windows and macOS test packages, use `build-windows.ps1` or
 `build-macos.sh`. See [desktop test releases](./docs/test-releases.md) for native
 host requirements, signed/unsigned builds and the manual Actions workflow.
 
+Linux users can also try `./build-cross-docker.sh win`. See
+[Docker cross-builds](./docs/docker-cross-builds.md) for Windows toolchain
+validation status and the native Mac runner controller.
+
 See the dedicated page for [development](./docs/development.md).
