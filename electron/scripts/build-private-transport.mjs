@@ -31,8 +31,11 @@ const output = path.join(
 );
 
 fs.mkdirSync(outputDir, { recursive: true });
+// Container bind mounts can make Git reject repository ownership. Hosted package
+// metadata records source provenance; sidecar compilation needs no VCS I/O.
 const buildArguments = [
   'build',
+  '-buildvcs=false',
   '-trimpath',
   '-ldflags=-s -w',
   '-o',
@@ -73,6 +76,7 @@ if (result.error?.code === 'ENOENT' && go === 'go') {
     'golang:1.26-bookworm',
     'go',
     'build',
+    '-buildvcs=false',
     '-trimpath',
     '-ldflags=-s -w',
     '-o',
