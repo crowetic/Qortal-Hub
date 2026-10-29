@@ -9,7 +9,10 @@ import {
   parseCrossOptions,
   verifyCrossOutput,
 } from '../scripts/run-cross-docker.mjs';
-import { assertWindowsX64 } from '../scripts/build-windows-cross.mjs';
+import {
+  assertWindowsInstaller,
+  assertWindowsX64,
+} from '../scripts/build-windows-cross.mjs';
 import { validateMacReceipt } from '../scripts/mac-ci-controller.mjs';
 
 const sourceRoot = path.resolve(
@@ -257,6 +260,25 @@ if(args[0]==='run' && !process.env.FIXTURE_NO_RECEIPT) {
     bytes.writeUInt16LE(0x8664, 68);
     write(file, bytes);
     expect(() => assertWindowsX64(file)).not.toThrow();
+  });
+
+  it('accepts NSIS x86 launcher stubs while requiring x64 application payloads', () => {
+    const file = path.join(temp, 'setup.exe');
+    const bytes = Buffer.alloc(128);
+    bytes.write('MZ');
+    bytes.writeUInt32LE(64, 60);
+    bytes.write('PE\0\0', 64);
+    for (const machine of [0x14c, 0x8664]) {
+      bytes.writeUInt16LE(machine, 68);
+      write(file, bytes);
+      expect(() => assertWindowsInstaller(file)).not.toThrow();
+      if (machine === 0x14c) expect(() => assertWindowsX64(file)).toThrow();
+    }
+    bytes.writeUInt16LE(0xaa64, 68);
+    write(file, bytes);
+    expect(() => assertWindowsInstaller(file)).toThrow();
+    write(file, '\x7fELF');
+    expect(() => assertWindowsInstaller(file)).toThrow();
   });
 
   it('requires native clean Mac provenance and prevents receipt path traversal', () => {

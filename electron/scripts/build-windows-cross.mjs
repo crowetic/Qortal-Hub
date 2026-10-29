@@ -13,16 +13,28 @@ const root = path.resolve(
 );
 const electron = path.join(root, 'electron');
 
-export function assertWindowsX64(file) {
+function windowsMachine(file) {
   const data = fs.readFileSync(file);
   const pe = data.length >= 64 ? data.readUInt32LE(60) : data.length;
   if (
     data.toString('ascii', 0, 2) !== 'MZ' ||
     pe + 6 > data.length ||
-    data.toString('ascii', pe, pe + 4) !== 'PE\0\0' ||
-    data.readUInt16LE(pe + 4) !== 0x8664
+    data.toString('ascii', pe, pe + 4) !== 'PE\0\0'
   )
+    throw new Error(`Not a Windows PE payload: ${file}`);
+  return data.readUInt16LE(pe + 4);
+}
+
+export function assertWindowsX64(file) {
+  if (windowsMachine(file) !== 0x8664)
     throw new Error(`Not a Windows x64 PE payload: ${file}`);
+}
+
+export function assertWindowsInstaller(file) {
+  // NSIS uses an x86 launcher even when its embedded application is x64.
+  // Native application payloads must still pass assertWindowsX64 separately.
+  if (![0x14c, 0x8664].includes(windowsMachine(file)))
+    throw new Error(`Not a Windows x86/x64 installer: ${file}`);
 }
 
 async function hash(file) {
@@ -250,7 +262,7 @@ export async function buildWindowsCross() {
       );
     if (!name) throw new Error(`Missing artifact ${suffix}`);
     const file = path.join(output, name);
-    assertWindowsX64(file);
+    assertWindowsInstaller(file);
     if (options.signing === 'signed')
       run('osslsigncode', [
         'verify',
