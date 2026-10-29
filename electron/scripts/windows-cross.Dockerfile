@@ -38,6 +38,9 @@ RUN curl -fL --retry 3 \
 ENV QORTAL_WINDOWS_PYTHON=/opt/windows-python/tools/python.exe \
     WINEDEBUG=-all \
     WINEARCH=win64 \
+    WINEDLLOVERRIDES="mscoree,mshtml=" \
     PYTHONLEGACYWINDOWSSTDIO=1 \
     PYTHONIOENCODING=utf-8
+# Python and Electron need neither Mono nor Gecko. Disable their first-run
+# installer dialogs so fresh Wine prefixes can initialize unattended.
 WORKDIR /workspace
