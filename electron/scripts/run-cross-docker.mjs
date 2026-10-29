@@ -71,6 +71,8 @@ export function crossDockerArguments(
   const args = [
     'run',
     '--rm',
+    // Xvfb's readiness handshake must not run as PID 1. Also reap Wine children.
+    '--init',
     '--platform',
     'linux/amd64',
     '--user',

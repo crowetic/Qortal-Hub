@@ -161,6 +161,7 @@ if(args[0]==='run' && !process.env.FIXTURE_NO_RECEIPT) {
     expect(commands[2]).toContain(
       `type=bind,source=${root},target=/source,readonly`
     );
+    expect(commands[2]).toContain('--init');
     expect(
       commands[2].some((arg) =>
         arg.includes('QORTAL_SOURCE_COMMIT=' + source.commit)
