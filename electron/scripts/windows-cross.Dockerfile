@@ -36,6 +36,8 @@ RUN curl -fL --retry 3 \
     && unzip -q /tmp/python.nupkg -d /opt/windows-python \
     && rm /tmp/python.nupkg
 ENV QORTAL_WINDOWS_PYTHON=/opt/windows-python/tools/python.exe \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
     WINEDEBUG=-all \
     WINEARCH=win64 \
     WINEDLLOVERRIDES="mscoree,mshtml=" \
@@ -43,4 +45,5 @@ ENV QORTAL_WINDOWS_PYTHON=/opt/windows-python/tools/python.exe \
     PYTHONIOENCODING=utf-8
 # Python and Electron need neither Mono nor Gecko. Disable their first-run
 # installer dialogs so fresh Wine prefixes can initialize unattended.
+# Wine also needs a UTF-8 Unix locale for Unicode paths in source archives.
 WORKDIR /workspace
