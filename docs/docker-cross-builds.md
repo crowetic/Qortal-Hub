@@ -1,10 +1,10 @@
 # Desktop builds controlled from Linux
 
 These commands use the regular desktop `main` checkout. Hosted-access and daemon
-branches retain their own packaging. The Windows Docker path is experimental:
-its component checks passed, but the first complete build was interrupted by a
-host crash. It must produce a verified completion receipt before an installer
-is shared. No command publishes a release or deploys a service.
+branches retain their own packaging. The Windows Docker path produces
+experimental test installers. It must produce a verified completion receipt
+before an installer is shared. No command publishes a release or deploys a
+service.
 
 | Command                                    | Where compilation happens                      | Result                             |
 | ------------------------------------------ | ---------------------------------------------- | ---------------------------------- |
@@ -29,6 +29,11 @@ insufficient: Python's `CopyFile2` call aborts while building the Reticulum
 package. The image uses signed WineHQ APT metadata and the standard Python
 implementation.
 
+Fresh builds run with Docker's init wrapper, disable unused Mono/Gecko installer
+dialogs, and use a UTF-8 locale. These settings avoid headless startup stalls and
+allow Windows Python to extract Unicode filenames from the Reticulum archive.
+The source archive and Python filesystem functions remain unmodified.
+
 ```sh
 git switch main
 git pull --ff-only origin main
@@ -36,6 +41,10 @@ git status --short
 docker info
 ./build-cross-docker.sh win
 ```
+
+The script honors the current Docker context and `DOCKER_HOST`. Run `docker info`
+in the same session to verify that it reaches the intended engine; the script
+does not start services or change Docker settings.
 
 You can inspect the target without contacting Docker:
 
@@ -58,6 +67,10 @@ SQLite prebuild and installs Windows Sharp optional dependencies. A real
 Windows Electron process under Wine exercises SQLite and PNG generation before
 and after packaging; a missing/incompatible addon fails the build. This path
 does not invoke a Linux rebuild of Windows native modules.
+
+NSIS setup and portable launchers use x86 PE stubs even for x64 applications.
+The build accepts those launcher stubs while requiring x64 application payloads
+and successful native addon checks under the packaged Windows Electron process.
 
 The source checkout and host npm projects remain untouched. Each build gets a
 new output directory under `electron/dist/test-releases/win-x64-<signing>/`.
@@ -114,9 +127,10 @@ the local unique `electron/dist/test-releases/mac-<arch>-unsigned/` directory.
 The remote build URL is printed for inspection or cancellation. Cancellation
 of the local controller does not automatically cancel the remote job.
 
-The Mac workflow could not be dispatched in this session: no GitHub token was
+The Docker controller image was built and its Node/GitHub CLI tools ran
+successfully. The Mac workflow could not be dispatched: no GitHub token was
 available and default-branch registration was outstanding. Tests exercise its
-CLI control flow with a fake GitHub CLI, not a native Mac build.
+CLI control flow with a fake GitHub CLI; no native Mac artifact has been verified.
 
 ## Completion, testing and recovery
 
@@ -135,11 +149,13 @@ on Windows. Back up app/wallet data and retain the previous installer before
 testing. Recovery is to close the test app and reinstall the previous version;
 no hosted frontend or daemon rollout is involved.
 
-The crash-recovery audit verified the retained Linux Docker AppImage against
-its receipt and found no Git corruption. The crash erased the temporary Wine
-test workspace, and the Docker engine was unavailable after reboot. Earlier
-real checks loaded Windows SQLite/Sharp under Windows Electron and verified
-Wine 11's file-copy API; a complete container build still needs verification.
+On 2026-10-28, clean desktop source `fca10f9e` completed the unsigned Windows
+Docker pipeline and produced both installers with a verified completion receipt.
+The packaged Windows Electron 44.1.1 process loaded SQLite 3.53.4 and Sharp
+0.34.5; frozen Reticulum 1.5.5 and the Go transport passed x64 payload checks.
+The existing Linux Docker AppImage remained unchanged and passed its checksum.
+Windows UI/installer testing on an actual Windows host and credential-backed
+signing remain outstanding.
 
 For repeatable orchestration checks:
 
