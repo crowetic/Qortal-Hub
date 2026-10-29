@@ -1270,7 +1270,16 @@ export const MessageItemComponent = ({
       return out;
     };
     const load = async (attempt = 0) => {
-      const result = await window.reticulumResources?.getUrl?.(imageResourceId);
+      let result;
+      try {
+        result = await window.reticulumResources?.getUrl?.(imageResourceId);
+      } catch (error) {
+        if (!cancelled) {
+          setReticulumImageDownloadIssue('error');
+          console.warn('[ReticulumResource] Image read failed:', error);
+        }
+        return;
+      }
       if (cancelled) return;
       if (result?.success && result.url) {
         const manifest = result.manifest as
@@ -1534,9 +1543,7 @@ export const MessageItemComponent = ({
         } else if (!payload.failed && !payload.canceled) {
           fileResourceFailureCheckRef.current += 1;
           setFileResourceStatus((status) =>
-            status === 'ready' || status === 'saving'
-              ? status
-              : 'downloading'
+            status === 'ready' || status === 'saving' ? status : 'downloading'
           );
         }
       }

@@ -42,36 +42,30 @@ export const extractComponents = (url: string) => {
   // If nothing meaningful left (e.g., "qortal://", "qortal:////"), return null
   if (!/[^/]/.test(url)) return null;
 
-  // Case 1: url contains a slash -> already service-based
-  if (url.includes('/')) {
-    // Identifier is part of QDN resource identity when present. Keep older
-    // links without identifier working, and route future reopen flows here.
-    const [basePart, queryString = ''] = url.split('?');
-    const parts = basePart.split('/');
-    const service = parts[0].toUpperCase();
-    parts.shift();
-    const name = decodeQortalName(parts[0] ?? '');
-    parts.shift();
-
-    const params = new URLSearchParams(queryString);
-    const identifier = params.get('identifier') || undefined;
-    if (identifier) {
-      params.delete('identifier');
-    }
-
-    const remainingQuery = params.toString();
-    const basePath = parts.join('/');
-    const path = `${basePath}${remainingQuery ? `?${remainingQuery}` : ''}`;
-
-    return { service, name, identifier, path };
+  // Split before decoding: escaped separators belong to the route/name, while
+  // a fragment must never become part of a query value or QDN resource name.
+  const hash = url.indexOf('#');
+  const fragment = hash >= 0 ? url.slice(hash) : '';
+  const withoutFragment = hash >= 0 ? url.slice(0, hash) : url;
+  const query = withoutFragment.indexOf('?');
+  const base = query >= 0 ? withoutFragment.slice(0, query) : withoutFragment;
+  const queryString = query >= 0 ? withoutFragment.slice(query + 1) : '';
+  const parts = base.split('/');
+  const service = parts.length > 1 ? parts.shift()!.toUpperCase() : 'WEBSITE';
+  const name = decodeQortalName(parts.shift() ?? '');
+  if (!name) return null;
+  const params = new URLSearchParams(queryString);
+  const identifier = params.get('identifier') || undefined;
+  let remainingQuery = queryString;
+  if (identifier) {
+    params.delete('identifier');
+    remainingQuery = params.toString();
   }
-
-  // Case 2: url is just a username -> default to WEBSITE
   return {
-    service: 'WEBSITE',
-    name: decodeQortalName(url),
-    identifier: undefined,
-    path: '',
+    service,
+    name,
+    identifier,
+    path: `${parts.join('/')}${remainingQuery ? `?${remainingQuery}` : ''}${fragment}`,
   };
 };
 
@@ -96,7 +90,7 @@ function processText(input) {
         });
         node.replaceWith(fragment);
       }
-    } else {
+    } else if (!(node instanceof Element && node.matches('a, pre, code'))) {
       Array.from(node.childNodes).forEach(processNode);
     }
   }
@@ -109,14 +103,31 @@ function processText(input) {
 
 const linkify = (text) => {
   if (!text) return '';
-  const cleanText = DOMPurify.sanitize(text);
-  let textFormatted = cleanText;
-  const urlPattern = /(\bhttps?:\/\/[^\s<]+|\bwww\.[^\s<]+)/g;
-  textFormatted = cleanText.replace(urlPattern, (url) => {
-    const href = url.startsWith('http') ? url : `https://${url}`;
-    return `<a href="${DOMPurify.sanitize(href)}" class="auto-link">${DOMPurify.sanitize(url)}</a>`;
-  });
-  return processText(textFormatted);
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = DOMPurify.sanitize(text);
+  const visit = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const parts = (node.textContent || '').split(
+        /(\bhttps?:\/\/[^\s<]+|\bwww\.[^\s<]+)/g
+      );
+      if (parts.length < 2) return;
+      const fragment = document.createDocumentFragment();
+      for (const part of parts) {
+        if (/^(https?:\/\/|www\.)/.test(part)) {
+          const anchor = document.createElement('a');
+          anchor.href = part.startsWith('http') ? part : `https://${part}`;
+          anchor.className = 'auto-link';
+          anchor.textContent = part;
+          fragment.appendChild(anchor);
+        } else fragment.appendChild(document.createTextNode(part));
+      }
+      node.parentNode?.replaceChild(fragment, node);
+    } else if (!(node instanceof Element && node.matches('a, pre, code'))) {
+      Array.from(node.childNodes).forEach(visit);
+    }
+  };
+  visit(wrapper);
+  return processText(wrapper.innerHTML);
 };
 
 const hasCodeBlock = (html) => /<pre[\s>]/i.test(html ?? '');
@@ -627,10 +638,17 @@ export const MessageDisplay = ({
       e.stopPropagation();
       return;
     }
-    if (target.tagName === 'A') {
-      openHttpUrlExternally(target.getAttribute('href'));
-    } else if (target.getAttribute('data-url')) {
-      const url = target.getAttribute('data-url');
+    const link = target.closest('a, [data-url]');
+    if (
+      link?.tagName === 'A' &&
+      !link.getAttribute('href')?.startsWith(QORTAL_PROTOCOL)
+    ) {
+      openHttpUrlExternally(link.getAttribute('href'));
+    } else if (
+      link?.getAttribute('data-url') ||
+      link?.getAttribute('href')?.startsWith(QORTAL_PROTOCOL)
+    ) {
+      const url = link.getAttribute('data-url') || link.getAttribute('href');
 
       try {
         if (await openQortalUseGroupLink(url)) return;

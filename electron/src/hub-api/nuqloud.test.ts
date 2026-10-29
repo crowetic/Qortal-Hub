@@ -139,9 +139,58 @@ describe('NuQloud account-bound native chat transport', () => {
     f.worker.resources = {
       getManifest: () => ({ ownerId: '716:Q-owned' }),
       listGroupReferences: () => [],
+      listReferences: () => [],
     };
     await expect(
       f.api.request({ method: 'resource:read', args: ['a'.repeat(64), 0, 64] })
+    ).rejects.toThrow('resource_access_denied');
+  });
+  it('reads received resources from current signed references, without requiring legacy download records', async () => {
+    const f = fixture();
+    const hash = 'a'.repeat(64);
+    let readable = true;
+    let scopeType = 'group';
+    let scopeId = '716';
+    Object.assign(f.manager, {
+      canReadGroupResourceReference: (
+        groupId: number,
+        eventId: string,
+        fileHash: string
+      ) =>
+        readable &&
+        groupId === 716 &&
+        eventId === 'peer-image' &&
+        fileHash === hash,
+      getResourceDownloadStatus: () => null,
+    });
+    f.worker.resources = {
+      // Native message ingestion writes the current index before any download.
+      listReferences: () => [{ scopeType, scopeId, eventId: 'peer-image' }],
+      listGroupReferences: () => [],
+      getManifest: () => ({
+        fileHash: hash,
+        sizeBytes: 128,
+        mimeType: 'image/png',
+      }),
+      getVerifiedAssembledPath: () => null,
+      getCompletedBytes: () => 0,
+    };
+    expect(
+      await f.api.request({ method: 'resource:getStatus', args: [hash] })
+    ).toMatchObject({ success: true, complete: false, totalBytes: 128 });
+    readable = false;
+    await expect(
+      f.api.request({ method: 'resource:getStatus', args: [hash] })
+    ).rejects.toThrow('resource_access_denied');
+    readable = true;
+    scopeType = 'dm';
+    await expect(
+      f.api.request({ method: 'resource:getStatus', args: [hash] })
+    ).rejects.toThrow('resource_access_denied');
+    scopeType = 'group';
+    scopeId = '717';
+    await expect(
+      f.api.request({ method: 'resource:getStatus', args: [hash] })
     ).rejects.toThrow('resource_access_denied');
   });
   it('bounds concurrent uploads before filesystem awaits and cleans abandoned files on close', async () => {

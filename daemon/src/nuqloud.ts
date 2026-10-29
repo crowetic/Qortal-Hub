@@ -172,13 +172,14 @@ export function nuqloudAccount(
           // A peer's manifest ownerId is metadata, not proof of local authorship.
           const authored = ownsNuqloudUpload(worker, hash);
           const referenced = worker.resources
-            .listGroupReferences(hash)
+            .listReferences(hash)
             .some(
               (ref) =>
-                worker.groupIds.includes(ref.groupId) &&
+                ref.scopeType === 'group' &&
+                worker.groupIds.includes(Number(ref.scopeId)) &&
                 !!ref.eventId &&
                 worker.manager.canReadGroupResourceReference(
-                  ref.groupId,
+                  Number(ref.scopeId),
                   ref.eventId,
                   hash
                 )

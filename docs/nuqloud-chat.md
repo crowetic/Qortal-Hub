@@ -101,3 +101,29 @@ No public Reticulum interfaces are enabled. The companion platform test
 `scripts/test-qchat-shared-ui.cjs` runs the real compiled UI/parent bridge and
 native signer/SQLite/resources; its engineering plan documents setup and rollout.
 Use the owner's existing lifecycle for deployment and retain all history/data.
+
+## Received resources and links follow-up
+
+The NuQloud resource reader uses the current `listReferences` index populated by
+native signed-event receipt. It accepts only group references with an event ID,
+current account membership and a fresh `canReadGroupResourceReference` check.
+The older `listGroupReferences` download index can be empty before a first peer
+download and must not gate its status request. Upload ownership remains tracked
+locally; peer manifest owner IDs are never proof. Image read exceptions now reach
+the existing Retry UI instead of becoming unhandled promise rejections.
+
+The embedded event adapter hands APP/WEBSITE links to the parent cloud's QDN
+viewer, and group invitations to its existing consent-based directory. It never
+chooses the cloud viewer's origin/route. The matching parent must allow separate
+HTTP(S) tabs from the frame; the existing HTTP helper uses `noopener,noreferrer`.
+Message auto-linking walks text nodes so formatted anchor attributes are not
+rewritten. Code blocks/existing anchors retain their markup, and nested formatted
+link text remains clickable. Escaped QDN names/routes/queries/fragments survive
+the handoff. DMs and other unsupported protocol actions remain unavailable.
+
+Run the NuQloud API, MessageDisplay, link-helper and presence unit suites, rebuild
+both daemon and `build:nuqloud`, then run the platform's compiled UI fixture. It
+checks a separately signed received image without a legacy reference, acquisition,
+decoding, forced read failure/Retry and actual sandboxed link navigation. The
+network boundary is controlled locally; live-peer delivery requires acceptance
+through the owner's Git/recreate deployment workflow.

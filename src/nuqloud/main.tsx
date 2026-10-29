@@ -42,6 +42,7 @@ import i18n from '../i18n/i18n';
 import '../styles/index.css';
 import './style.css';
 import { connectPresence } from './presence';
+import { qortalAppLink } from './links';
 
 function Chat() {
   const store = useStore();
@@ -60,9 +61,23 @@ function Chat() {
       'openUserLookupDrawer',
     ];
     const unavailable = () => setNotice(t('reticulum:nuqloud.unsupported'));
+    const openApp = (event: CustomEvent) => {
+      const url = qortalAppLink(event.detail?.data);
+      if (!url) return unavailable();
+      void parentRequest('qortal', { url }).catch(unavailable);
+    };
+    const joinGroup = (event: CustomEvent) => {
+      const groupId = Number(event.detail?.groupId);
+      if (!Number.isSafeInteger(groupId) || groupId <= 0) return unavailable();
+      void parentRequest('directory', { groupId }).catch(unavailable);
+    };
     for (const event of events) subscribeToEvent(event, unavailable);
+    subscribeToEvent('addTab', openApp);
+    subscribeToEvent('globalActionJoinGroup', joinGroup);
     return () => {
       for (const event of events) unsubscribeFromEvent(event, unavailable);
+      unsubscribeFromEvent('addTab', openApp);
+      unsubscribeFromEvent('globalActionJoinGroup', joinGroup);
     };
   }, [t]);
   useEffect(() => {

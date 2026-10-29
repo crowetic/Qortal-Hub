@@ -1,6 +1,6 @@
 // MessageDisplay.test.ts
-import { render } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { extractComponents, MessageDisplay } from './MessageDisplay';
 
 describe('extractComponents', () => {
@@ -60,6 +60,34 @@ describe('extractComponents', () => {
   it('handles just protocol (no content) as null', () => {
     expect(extractComponents('qortal://')).toBeNull();
   });
+  it('preserves escaped names/routes, nested query values and fragments', () => {
+    expect(
+      extractComponents(
+        'qortal://APP/Alice%2520Name/path%2Fkeep?next=%252F#section'
+      )
+    ).toEqual({
+      service: 'APP',
+      name: 'Alice%20Name',
+      identifier: undefined,
+      path: 'path%2Fkeep?next=%252F#section',
+    });
+    expect(extractComponents('qortal://alice?next=%2F#section')).toEqual({
+      service: 'WEBSITE',
+      name: 'alice',
+      identifier: undefined,
+      path: '?next=%2F#section',
+    });
+    expect(
+      extractComponents(
+        'qortal://APP/Alice/route?identifier=id%252F&next=%2F#part'
+      )
+    ).toEqual({
+      service: 'APP',
+      name: 'Alice',
+      identifier: 'id%2F',
+      path: 'route?next=%2F#part',
+    });
+  });
 
   it('handles single-segment non-empty after protocol with spaces', () => {
     const res = extractComponents(
@@ -71,6 +99,25 @@ describe('extractComponents', () => {
       identifier: undefined,
       path: '',
     });
+  });
+});
+
+describe('message link activation', () => {
+  it('opens a web link when a nested formatted label is clicked', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    try {
+      const { getByText } = render(
+        <MessageDisplay htmlContent='<p><a href="https://example.com/path"><strong>External link label</strong></a></p>' />
+      );
+      fireEvent.click(getByText('External link label'));
+      expect(open).toHaveBeenCalledWith(
+        'https://example.com/path',
+        '_blank',
+        'noopener,noreferrer'
+      );
+    } finally {
+      open.mockRestore();
+    }
   });
 });
 
