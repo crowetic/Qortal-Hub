@@ -74,7 +74,16 @@ malicious first-party code. Normal Hub content sanitization still applies.
 Group history/send, rich formatting, replies, edits/deletion, reactions, search,
 read/mute state, images/files, channels/categories and verified-admin metadata
 use the original components. A members reader and native presence are available.
-Group discovery/joining uses NuQloud's existing directory and consent flow.
+Group discovery/joining uses NuQloud's directory and consent flow. Its parent
+owns Top/Active/Newest/Largest ordering, creation fee review/Core confirmation,
+and separate first member/admin-key setup; these are shared by both chat UIs.
+`getPublicGroupDiscovery` is a zero-argument wallet RPC using the configured Core,
+native public Reticulum activity and the same Score v3 calculation as desktop.
+It returns versioned metadata only, excluding private/unsolicited activity IDs;
+unknown observations stay unknown. See [Group Score](reticulum-group-score.md).
+External Auth retains creation signing and all key generation/encryption; setup
+and key state use its new `GET_QORTAL_GROUP_SETUP` reader. Upgrade platform, Auth
+and this branch together. Group key rotation/distribution is separate.
 DMs, calls, calendar and Q-Manager are unavailable. Legacy threads and automatic
 welcome publications are disabled. The native wire protocol/history are retained.
 
@@ -90,7 +99,8 @@ the old account's status.
 ## Verification
 
 ```bash
-node node_modules/vitest/vitest.mjs run src/nuqloud/presence.test.ts src/atoms/presence.test.ts electron/src/hub-api/nuqloud.test.ts src/hosted/client.test.ts src/hosted/HostedConnectionNotice.test.tsx
+node node_modules/vitest/vitest.mjs run src/nuqloud/presence.test.ts src/atoms/presence.test.ts electron/src/hub-api/nuqloud.test.ts electron/src/hub-api/group-discovery.test.ts src/components/Group/reticulumGroupScore.test.ts src/hosted/client.test.ts src/hosted/HostedConnectionNotice.test.tsx
+QORTAL_EXTERNAL_AUTH_REPO=/path/to/built/Qortal-External-Auth node node_modules/vitest/vitest.mjs run electron/src/hub-api/group-key-interop.test.ts
 QORTAL_EXTERNAL_AUTH_REPO=/path/to/Qortal-External-Auth node --test daemon/test/headless.test.cjs
 ```
 

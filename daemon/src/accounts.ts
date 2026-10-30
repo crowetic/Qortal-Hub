@@ -476,6 +476,11 @@ export class AccountWorker {
     );
     return { groupId, isAdmin: local?.isAdmin === true };
   }
+  async readDiscoveryCore(
+    resource: '/groups/balances?limit=0&reverse=true' | '/admin/info'
+  ) {
+    return requestJson(`${this.config.coreUrl}${resource}`);
+  }
   async refreshMemberships() {
     if (Date.now() - this.membershipAt < 15_000) return;
     if (this.membershipPending) return this.membershipPending;

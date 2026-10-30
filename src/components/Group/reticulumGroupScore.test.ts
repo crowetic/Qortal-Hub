@@ -3,7 +3,7 @@ import {
   calculateReticulumGroupScore,
   getCommunityLevel,
   getLegacyLevel,
-} from './reticulumGroupScore';
+} from '../../lib/reticulum/groupScore';
 
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 

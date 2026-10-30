@@ -56,7 +56,28 @@ test(
     const core = http.createServer((req, res) => {
       const url = new URL(req.url, 'http://localhost');
       res.setHeader('Content-Type', 'application/json');
-      if (url.pathname.startsWith('/groups/member/'))
+      if (url.pathname === '/groups/balances')
+        res.end(
+          JSON.stringify([
+            {
+              groupId: 716,
+              isOpen: true,
+              memberCount: 2,
+              balance: 100,
+              created: Date.now() - 86400000,
+            },
+            {
+              groupId: 717,
+              isOpen: false,
+              memberCount: 2,
+              balance: 100,
+              created: Date.now() - 86400000,
+            },
+          ])
+        );
+      else if (url.pathname === '/admin/info')
+        res.end(JSON.stringify({ currentTimestamp: Date.now() }));
+      else if (url.pathname.startsWith('/groups/member/'))
         res.end(JSON.stringify([{ groupId: 716, isOpen: true }]));
       else if (url.pathname === '/groups/members/716')
         res.end(
@@ -266,6 +287,15 @@ test(
         assert.equal(response.contractVersion, 1);
         return response.result;
       };
+      const discovery = await rpc('getPublicGroupDiscovery', []);
+      assert.equal(discovery.contractVersion, 1);
+      assert.equal(discovery.scoreVersion, 3);
+      assert.deepEqual(
+        discovery.groups.map((group) => group.groupId),
+        [716]
+      );
+      assert.ok(discovery.expiresAt > Date.now());
+      assert.ok('score' in discovery.groups[0]);
       const page = await rpc('getMessageHistoryPage', [716, 'general', 20]);
       const original = page.events.find(
         (event) => event.eventId === sent.eventId

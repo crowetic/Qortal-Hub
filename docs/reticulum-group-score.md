@@ -33,7 +33,7 @@ Activity Score =
 
 One visible user post counts once. Active authors carry the most weight because participation breadth is harder to inflate than message volume; seven-day volume rewards sustained use; 24-hour volume adds recency without letting a short burst dominate. Activity contributes up to 30 points, making sustained participation the second-largest signal after QORT Holdings.
 
-A successfully fetched activity directory that omits a public group is treated as zero activity. If the complete activity request fails, an existing valid snapshot is retained instead of replacing Activity with zeros.
+Unknown activity is distinguished from observed zero activity. The wallet-scoped NuQloud discovery reader returns `score: null` until it has an available, fresh native activity summary; it can fill that observation within the same slot. If an activity request fails, a valid bounded snapshot is retained instead of replacing Activity with zeros.
 
 ### Community — 10%
 
@@ -85,4 +85,27 @@ Find Groups uses deterministic tie-breakers so equal values do not jump unpredic
 - **Newest:** creation time, then group ID.
 - **Largest:** members, Group Score, newest.
 
-The implementation and constants live in `src/components/Group/reticulumGroupScore.ts`.
+The pure calculation and constants live in `src/lib/reticulum/groupScore.ts`,
+shared by the renderer hook in `src/components/Group/reticulumGroupScore.ts` and
+`daemon/src/group-discovery.ts`. Legacy uses completed UTC calendar years at the
+snapshot's network timestamp so desktop/server timezone differences do not alter
+this part of the same snapshot.
+
+## NuQloud wallet-scoped discovery
+
+`getPublicGroupDiscovery` is a zero-argument read RPC on `hosted-access`. It reads
+public IDs/holdings from the account worker's configured Core, then supplies only
+those IDs to the existing native public-activity manager. Browser-supplied Core
+URLs or public-ID lists are refused. Private and unsolicited activity IDs are
+filtered from the response. Metadata uses six-hour network slots; failures retry
+after one minute and stale metadata/scores expire after 24 hours. Account-worker
+caches are separate and disappear with the worker.
+
+The result has `contractVersion: 1`, `scoreVersion: 3`, `capturedAt`, `expiresAt`,
+`stale` and `groups`. Each group contains its ID, Core metadata and either the
+shared score breakdown with `activityObserved: true`, or an unknown `score: null`.
+No wallet keys or private group activity are returned. The NuQloud parent ranks
+the complete fresh Core directory before limiting visible matches, pins canonical
+Qortal Project (1144) in Top, and shows a Largest fallback when no valid observed
+scores are available. Newest/Largest and explicit search can display private Core
+metadata without attaching public scores.

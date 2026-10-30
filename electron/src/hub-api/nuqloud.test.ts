@@ -83,6 +83,34 @@ describe('NuQloud account-bound native chat transport', () => {
       })
     ).rejects.toThrow('denied');
   });
+  it('binds public discovery to the worker Core and refuses caller-controlled public IDs', async () => {
+    const f = fixture();
+    let coreCalls = 0;
+    f.worker.readDiscoveryCore = async (resource: string) => {
+      coreCalls++;
+      return resource.startsWith('/groups/')
+        ? []
+        : { currentTimestamp: Date.now() };
+    };
+    Object.assign(f.manager, {
+      setPublicGroupDirectory: () => {},
+      getPublicGroupActivitySnapshot: () => ({
+        availableGroupIds: [],
+        summaries: [],
+      }),
+    });
+    await expect(
+      f.api.request({
+        method: 'getPublicGroupDiscovery',
+        args: [{ coreUrl: 'http://other', publicGroupIds: [717] }],
+      })
+    ).rejects.toThrow('invalid_chat_request');
+    expect(coreCalls).toBe(0);
+    expect(
+      await f.api.request({ method: 'getPublicGroupDiscovery', args: [] })
+    ).toMatchObject({ contractVersion: 1, scoreVersion: 3, groups: [] });
+    expect(coreCalls).toBe(2);
+  });
   it('filters queued events against current channel access, including revocation', async () => {
     const f = fixture();
     f.manager.emit('event', {

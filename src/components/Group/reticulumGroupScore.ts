@@ -1,3 +1,19 @@
+import {
+  calculateReticulumGroupScore,
+  type ReticulumGroupActivityMetrics,
+  type ReticulumGroupScoreBreakdown,
+  type ReticulumGroupScoreSnapshot,
+} from '../../lib/reticulum/groupScore';
+export {
+  calculateReticulumGroupScore,
+  getLegacyLevel,
+  getCommunityLevel,
+} from '../../lib/reticulum/groupScore';
+export type {
+  ReticulumGroupActivityMetrics,
+  ReticulumGroupScoreBreakdown,
+  ReticulumGroupScoreSnapshot,
+} from '../../lib/reticulum/groupScore';
 import { useEffect, useSyncExternalStore } from 'react';
 import { getBaseApiReact } from '../../App';
 
@@ -8,44 +24,6 @@ const GROUP_SCORE_VERSION = 3;
 const GROUP_SCORE_SLOT_MS = 6 * 60 * 60_000;
 const GROUP_SCORE_MAX_STALE_MS = 24 * 60 * 60_000;
 const UNKNOWN_GROUP_REFRESH_COOLDOWN_MS = 5 * 60_000;
-const QORT_HOLDING_TARGET = 1_000_000;
-const ACTIVITY_AUTHORS_TARGET = 50;
-const ACTIVITY_MESSAGES_7D_TARGET = 500;
-const ACTIVITY_MESSAGES_24H_TARGET = 100;
-
-export type ReticulumGroupActivityMetrics = {
-  activeAuthors7d: number;
-  confidence: number;
-  messages24h: number;
-  messages7d: number;
-  observedAt: number;
-};
-
-export type ReticulumGroupScoreBreakdown = {
-  activity: ReticulumGroupActivityMetrics;
-  activityObserved?: boolean;
-  activityScore: number;
-  balance: number;
-  capturedAt: number;
-  communityScore: number;
-  created: number;
-  groupId: number;
-  holdingScore: number;
-  legacyScore: number;
-  memberCount: number;
-  score: number;
-};
-
-export type ReticulumGroupScoreSnapshot = {
-  capturedAt: number;
-  evaluatedGroupIds: string[];
-  groups: Record<string, ReticulumGroupScoreBreakdown>;
-  holdings: Record<string, number>;
-  networkOffsetMs: number;
-  slot: number;
-  version: 3;
-};
-
 const EMPTY_SNAPSHOT: ReticulumGroupScoreSnapshot = {
   capturedAt: 0,
   evaluatedGroupIds: [],
@@ -56,49 +34,6 @@ const EMPTY_SNAPSHOT: ReticulumGroupScoreSnapshot = {
   version: GROUP_SCORE_VERSION,
 };
 
-const clampScore = (value: number) =>
-  Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
-
-const logarithmicScore = (value: number, target: number) => {
-  const normalizedValue = Math.max(0, Number(value) || 0);
-  if (normalizedValue <= 0) return 0;
-  return clampScore(
-    (Math.log1p(normalizedValue) / Math.log1p(target)) * 100
-  );
-};
-
-const proportionalScore = (value: number, target: number) =>
-  clampScore((Math.max(0, Number(value) || 0) / target) * 100);
-
-export const getLegacyLevel = (timestamp?: number | string) => {
-  const created = Number(timestamp);
-  if (!Number.isFinite(created) || created <= 0) return null;
-  const start = new Date(created);
-  const now = new Date();
-  let years = now.getFullYear() - start.getFullYear();
-  if (
-    now.getMonth() < start.getMonth() ||
-    (now.getMonth() === start.getMonth() && now.getDate() < start.getDate())
-  ) {
-    years -= 1;
-  }
-  return Math.max(0, Math.min(10, years));
-};
-
-export const getCommunityLevel = (count?: number) => {
-  const members = Math.max(0, Number(count) || 0);
-  if (members <= 10) return 1;
-  if (members <= 25) return 2;
-  if (members <= 50) return 3;
-  if (members <= 99) return 4;
-  if (members <= 249) return 5;
-  if (members <= 499) return 6;
-  if (members <= 999) return 7;
-  if (members <= 2499) return 8;
-  if (members <= 4999) return 9;
-  return 10;
-};
-
 export const getReticulumGroupScoreColor = (score?: number | null) => {
   if (!Number.isFinite(score)) return '#8F96A5';
   if (Number(score) <= 24) return '#EF4444';
@@ -106,52 +41,6 @@ export const getReticulumGroupScoreColor = (score?: number | null) => {
   if (Number(score) <= 64) return '#FACC15';
   if (Number(score) <= 94) return '#22C55E';
   return '#00A8FF';
-};
-
-export const calculateReticulumGroupScore = (input: {
-  activity: ReticulumGroupActivityMetrics;
-  activityObserved: boolean;
-  balance: number;
-  capturedAt: number;
-  created: number;
-  groupId: number;
-  memberCount: number;
-}): ReticulumGroupScoreBreakdown | null => {
-  const legacyLevel = getLegacyLevel(input.created);
-  if (legacyLevel == null) return null;
-  const holdingScore = logarithmicScore(input.balance, QORT_HOLDING_TARGET);
-  const activeAuthorsScore = proportionalScore(
-    input.activity.activeAuthors7d,
-    ACTIVITY_AUTHORS_TARGET
-  );
-  const messages7dScore = proportionalScore(
-    input.activity.messages7d,
-    ACTIVITY_MESSAGES_7D_TARGET
-  );
-  const messages24hScore = proportionalScore(
-    input.activity.messages24h,
-    ACTIVITY_MESSAGES_24H_TARGET
-  );
-  const activityScore =
-    activeAuthorsScore * 0.5 +
-    messages7dScore * 0.3 +
-    messages24hScore * 0.2;
-  const legacyScore = Math.min(100, legacyLevel * 10);
-  const communityScore = getCommunityLevel(input.memberCount) * 10;
-  const score = Math.round(
-    holdingScore * 0.5 +
-      activityScore * 0.3 +
-      legacyScore * 0.1 +
-      communityScore * 0.1
-  );
-  return {
-    ...input,
-    activityScore,
-    communityScore,
-    holdingScore,
-    legacyScore,
-    score: Math.max(0, Math.min(100, score)),
-  };
 };
 
 const isPublicGroup = (group: any) =>
@@ -177,7 +66,10 @@ const readCachedSnapshot = (): ReticulumGroupScoreSnapshot => {
       return EMPTY_SNAPSHOT;
     }
     const networkNow = Date.now() + (Number(parsed.networkOffsetMs) || 0);
-    if (networkNow - Number(parsed.capturedAt || 0) > GROUP_SCORE_MAX_STALE_MS) {
+    if (
+      networkNow - Number(parsed.capturedAt || 0) >
+      GROUP_SCORE_MAX_STALE_MS
+    ) {
       return EMPTY_SNAPSHOT;
     }
     return parsed as ReticulumGroupScoreSnapshot;
@@ -194,7 +86,10 @@ const unknownGroupRefreshes = new Map<string, number>();
 const emitSnapshot = (snapshot: ReticulumGroupScoreSnapshot) => {
   currentSnapshot = snapshot;
   try {
-    window.localStorage.setItem(GROUP_SCORE_CACHE_KEY, JSON.stringify(snapshot));
+    window.localStorage.setItem(
+      GROUP_SCORE_CACHE_KEY,
+      JSON.stringify(snapshot)
+    );
   } catch {
     // Scores remain available for the current session without persistent storage.
   }
@@ -213,7 +108,8 @@ const getSnapshot = () => currentSnapshot;
 const currentNetworkTime = () =>
   Date.now() + (Number(currentSnapshot.networkOffsetMs) || 0);
 
-const currentSlot = () => Math.floor(currentNetworkTime() / GROUP_SCORE_SLOT_MS);
+const currentSlot = () =>
+  Math.floor(currentNetworkTime() / GROUP_SCORE_SLOT_MS);
 
 const delay = (milliseconds: number) =>
   new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
@@ -234,7 +130,9 @@ export const refreshReticulumGroupScores = async (
           .catch(() => null),
       ]);
       if (!balancesResponse.ok) {
-        throw new Error(`Group balances request failed (${balancesResponse.status})`);
+        throw new Error(
+          `Group balances request failed (${balancesResponse.status})`
+        );
       }
       const balances = await balancesResponse.json();
       if (!Array.isArray(balances)) {
@@ -286,15 +184,19 @@ export const refreshReticulumGroupScores = async (
           });
         }
       }
-      const availableGroupIds = new Set<number>([
-        ...(firstActivity?.availableGroupIds || []),
-        ...(latestActivity?.availableGroupIds || []),
-      ].map(Number));
+      const availableGroupIds = new Set<number>(
+        [
+          ...(firstActivity?.availableGroupIds || []),
+          ...(latestActivity?.availableGroupIds || []),
+        ].map(Number)
+      );
 
       const publicIds = new Set(publicGroupIds.map(String));
       const preservingCurrentSlot = currentSnapshot.slot === slot;
       const nextGroups: Record<string, ReticulumGroupScoreBreakdown> = {};
-      for (const [groupId, previous] of Object.entries(currentSnapshot.groups)) {
+      for (const [groupId, previous] of Object.entries(
+        currentSnapshot.groups
+      )) {
         if (
           publicIds.has(groupId) &&
           capturedAt - Number(previous?.capturedAt || 0) <=

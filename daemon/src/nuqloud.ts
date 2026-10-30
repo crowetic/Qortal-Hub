@@ -7,6 +7,7 @@ import { invokeHosted } from './hosted/rpc';
 import { HubApiError } from '../../electron/src/hub-api/auth';
 import { encodeWire, decodeWire } from '../../src/hosted/wire';
 import { uploadsFor, ownsNuqloudUpload } from './nuqloud-resources';
+import { getPublicGroupDiscovery } from './group-discovery';
 
 // Deliberately smaller than the wallet-authenticated hosted browser contract.
 // Publications use the existing leased /groups/:id/events endpoint, not RPC.
@@ -141,6 +142,11 @@ export function nuqloudAccount(
       )
         throw new HubApiError(400, 'invalid_chat_request');
       worker.runtime.assertAccount();
+      if (method === 'getPublicGroupDiscovery') {
+        if (args.length !== 0)
+          throw new HubApiError(400, 'invalid_chat_request');
+        return getPublicGroupDiscovery(worker);
+      }
       if (
         [
           'presence:getStatus',
