@@ -159,7 +159,7 @@ friend management remain hidden. Only the latest native 200-event history window
 is exposed by the reused component. Local acceptance or an optimistic display
 does not prove peer delivery. Keys and app credentials remain in Auth.
 
-Build renderer/daemon together and update platform app 0.1.70+, broker and Auth
+Build renderer/daemon together and update platform app 0.1.71+, broker and Auth
 main alongside hosted-access. No new schema is required. Source changes do not
 authorize deployment; use the platform's documented owner lifecycle/readiness
 and retain wallets, signed histories/resources and transaction receipts on recovery.
