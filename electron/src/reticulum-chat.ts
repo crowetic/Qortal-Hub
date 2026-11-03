@@ -13942,6 +13942,12 @@ export class ReticulumChatManager extends EventEmitter {
       eventId,
       candidatePeers: [],
     });
+    if (
+      this.resourceTransfer.getDownloadStatus(manifest.fileHash).failureReason ===
+      'disk_full'
+    ) {
+      return { ok: true };
+    }
     void this.announceResourceDiscovery(
       groupId,
       manifest,
@@ -14030,6 +14036,12 @@ export class ReticulumChatManager extends EventEmitter {
         peerAddress: remoteAddress,
       },
     });
+    if (
+      this.directResourceTransfer.getDownloadStatus(manifest.fileHash)
+        .failureReason === 'disk_full'
+    ) {
+      return { ok: true };
+    }
     void this.announceDirectResourceDiscovery(
       conversationId,
       remoteAddress,
@@ -14056,6 +14068,8 @@ export class ReticulumChatManager extends EventEmitter {
       this.directResourceTransfer?.getDownloadStatus(fileHash) ?? null;
     if (directStatus?.active) return directStatus;
     if (groupStatus?.active) return groupStatus;
+    if (directStatus?.failureReason) return directStatus;
+    if (groupStatus?.failureReason) return groupStatus;
     return directStatus ?? groupStatus ?? null;
   }
 

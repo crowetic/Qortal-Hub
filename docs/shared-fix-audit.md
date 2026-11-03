@@ -52,3 +52,23 @@ Keep the previous built release for recovery and switch the service back to it
 if checks fail, preserving its original environment and data directory. No
 database schema migration is introduced. A browser-facing daemon on ai-devrig-2
 must use the matching `hosted-access` package rather than this smaller API.
+
+## Test release alignment on 2026-11-02
+
+Selected the shared Reticulum resource fixes from upstream `develop` through
+`a9588f4d`, matching the desktop test source on `main` (`b6c87277`). Free-space
+reserve is capped at 4 GiB. Disk exhaustion terminates the affected transfer,
+releases its storage protection, cancels pending offers and prevents discovery
+from immediately retrying it. A later explicit retry can clear that failure.
+
+The standalone API has no Q-App viewer, group admin panel, publishing interface
+or foreign-coin signing/send endpoint, so those desktop/browser changes belong
+on `main` and `hosted-access`. The shared Python bridge has no new upstream
+changes in this interval. The existing Python pin, injected Node platform,
+per-account isolation and database schema remain unchanged.
+
+Validation: all 586 selected resource/chat tests passed (74 skipped), both
+real daemon tests passed with SQLite, External Auth and local Python Reticulum,
+and the headless build and changed-file lint passed. The build still rejects
+Electron imports. Use the existing environment, readiness and rollback steps
+above for an operator-authorized rollout. No service was deployed or restarted.
