@@ -54,7 +54,11 @@ import {
   getNameInfo,
   uint8ArrayToObject,
 } from '../encryption/encryption.ts';
-import { showSaveFilePicker } from '../hooks/useQortalMessageListener.tsx';
+import { showSaveFilePicker } from './qapp-save-file';
+import {
+  checkPublishStorage,
+  requirePublishFile,
+} from '../qdn/publish/upload-validation';
 import {
   codedQortalRequestError,
   USER_DECLINED_REQUEST_CODE,
@@ -117,6 +121,7 @@ import { createTransaction } from '../transactions/transactions.ts';
 import { executeEvent } from '../utils/events.ts';
 import { getElectronPersistentStorage } from '../utils/electronPersistentStorage';
 import { fileToBase64 } from '../utils/fileReading/index.ts';
+import { isQAppFile } from './qapp-file-reference';
 import { mimeToExtensionMap } from '../utils/memeTypes.ts';
 import { RequestQueueWithPromise } from '../utils/queue/queue.ts';
 import { normalizeQappIdentityContext } from './qapp-identity.ts';
@@ -133,7 +138,7 @@ import {
 import { hasInvisibleCharacters } from '../utils/hasInvisibleCharacters';
 import { validateAddress } from '../utils/validateAddress.ts';
 import i18n from 'i18next';
-import aesjs from 'aes-js';
+import { decryptAesCtrChunk } from '../qdn/encryption/aes-ctr-stream';
 import { roundUpToDecimals } from '../utils/numberFunctions.ts';
 import { normalizeFilename } from '../utils/downloadFromLocation.ts';
 
@@ -2109,7 +2114,7 @@ export const publishMultipleQDNResources = async (
   if (isPublicNode) {
     const hasOversizedFilePublicNode = resources.some((resource) => {
       const file = resource?.file;
-      return file instanceof File && file.size > MAX_SIZE_PUBLIC_NODE;
+      return isQAppFile(file) && file.size > MAX_SIZE_PUBLIC_NODE;
     });
 
     if (hasOversizedFilePublicNode) {
@@ -2124,7 +2129,7 @@ export const publishMultipleQDNResources = async (
 
   const hasOversizedFile = resources.some((resource) => {
     const file = resource?.file;
-    return file instanceof File && file.size > MAX_SIZE_PUBLISH;
+    return isQAppFile(file) && file.size > MAX_SIZE_PUBLISH;
   });
 
   if (hasOversizedFile) {
@@ -2138,19 +2143,14 @@ export const publishMultipleQDNResources = async (
 
   const totalFileSize = resources.reduce((acc, resource) => {
     const file = resource?.file;
-    if (file && file?.size && !isNaN(file?.size)) {
+    if (file != null) {
+      requirePublishFile(file);
       return acc + file.size;
     }
     return acc;
   }, 0);
   if (totalFileSize > 0) {
-    const urlCheck = `/arbitrary/check/tmp?totalSize=${totalFileSize}`;
-
-    const checkEndpoint = await createEndpoint(urlCheck);
-    const checkRes = await fetch(checkEndpoint);
-    if (!checkRes.ok) {
-      throw new Error('Not enough space on your hard drive');
-    }
+    await checkPublishStorage(totalFileSize, createEndpoint);
   }
 
   const encrypt = data?.encrypt;
@@ -3023,7 +3023,10 @@ export const joinGroup = async (data, isFromExtension, appInfo?) => {
 
 export const saveFile = async (data, sender, isFromExtension, snackMethods) => {
   try {
-    if (!data?.filename) throw new Error('Missing filename');
+    if (!data?.filename)
+      throw new Error(i18n.t('question:message.error.missing_fields', {
+        fields: 'filename', postProcess: 'capitalizeFirstChar',
+      }));
 
     // Handle location-based downloads (streaming approach)
     if (data?.location) {
@@ -3046,6 +3049,8 @@ export const saveFile = async (data, sender, isFromExtension, snackMethods) => {
     }
     const filename = data.filename;
     const blob = data.blob;
+    if (!isQAppFile(blob))
+      throw new Error(i18n.t('question:stream_save.failed'));
 
     const resPermission = await getUserPermission(
       {
@@ -3088,10 +3093,9 @@ export const saveFile = async (data, sender, isFromExtension, snackMethods) => {
         };
       }
 
-      showSaveFilePicker(
+      await showSaveFilePicker(
         {
           filename,
-          mimeType,
           blob,
         },
         snackMethods
@@ -3258,11 +3262,10 @@ async function saveFileFromLocation(data, isFromExtension, snackMethods) {
           // Decrypt chunk if encrypted
           if (isEncrypted) {
             try {
-              const blockOffset = BigInt(bytesProcessed >> 4);
               chunkToWrite = await decryptAesCtrChunk(
                 keyBytes,
                 ivBytes,
-                blockOffset,
+                bytesProcessed,
                 value
               );
             } catch (decryptError: any) {
@@ -3388,11 +3391,10 @@ async function saveFileFromLocation(data, isFromExtension, snackMethods) {
               break;
             }
 
-            const blockOffset = BigInt(bytesProcessed >> 4);
             const decryptedChunk = await decryptAesCtrChunk(
               keyBytes,
               ivBytes,
-              blockOffset,
+              bytesProcessed,
               value
             );
 
@@ -3437,11 +3439,10 @@ async function saveFileFromLocation(data, isFromExtension, snackMethods) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const blockOffset = BigInt(bytesProcessed >> 4);
           const decryptedChunk = await decryptAesCtrChunk(
             keyBytes,
             ivBytes,
-            blockOffset,
+            bytesProcessed,
             value
           );
 
@@ -3540,65 +3541,6 @@ async function saveFileFromLocation(data, isFromExtension, snackMethods) {
 
     return true;
   }
-}
-
-/**
- * Decrypts a single chunk using AES-CTR
- */
-async function decryptAesCtrChunk(keyBytes, ivBytes, blockOffset, ciphertext) {
-  // Try WebCrypto first
-  if (crypto?.subtle) {
-    try {
-      const cryptoKey = await crypto.subtle.importKey(
-        'raw',
-        keyBytes,
-        { name: 'AES-CTR' },
-        false,
-        ['decrypt']
-      );
-
-      const counter = deriveCtrCounter(ivBytes, blockOffset);
-
-      const decrypted = await crypto.subtle.decrypt(
-        {
-          name: 'AES-CTR',
-          counter,
-          length: 128,
-        },
-        cryptoKey,
-        ciphertext
-      );
-
-      return new Uint8Array(decrypted);
-    } catch (e) {
-      console.warn('WebCrypto AES-CTR decrypt failed, falling back:', e);
-    }
-  }
-
-  // Fallback using aes-js
-  return fallbackDecryptCtr(keyBytes, ivBytes, blockOffset, ciphertext);
-}
-
-function deriveCtrCounter(iv, blockOffset) {
-  const counter = new Uint8Array(iv);
-  let carry = blockOffset;
-
-  for (let i = 15; i >= 0 && carry > 0n; i--) {
-    const sum = BigInt(counter[i]) + (carry & 0xffn);
-    counter[i] = Number(sum & 0xffn);
-    carry = (carry >> 8n) + (sum >> 8n);
-  }
-  return counter;
-}
-
-function fallbackDecryptCtr(keyBytes, ivBytes, blockOffset, ciphertext) {
-  const counter = deriveCtrCounter(ivBytes, blockOffset);
-  const aesCtr = new aesjs.ModeOfOperation.ctr(
-    keyBytes,
-    new aesjs.Counter(counter)
-  );
-  const decrypted = aesCtr.decrypt(ciphertext);
-  return new Uint8Array(decrypted);
 }
 
 export const deployAt = async (data, isFromExtension) => {

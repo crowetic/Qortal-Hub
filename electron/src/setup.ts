@@ -18,6 +18,9 @@ import { createForeignWalletJournal } from './foreign-wallet-journal';
 import { QAppFileSaves, SaveError } from './qapp-file-save';
 import { qappGuestPartition, qappGuestUrlAllowed, type QAppGuestOwner } from './qapp-guest-policy';
 import { restrictQAppGuestWebRtc } from './qapp-guest-network-policy';
+import { QAppFileWorkers, QAPP_FILE_WORKER_CSP } from './qapp-file-workers';
+import { QAPP_FILE_WORKER_URL } from './qapp-file-protocol';
+import { isQAppFileGuest } from './qapp-file-guest';
 import type { CapacitorElectronConfig } from '@capacitor-community/electron';
 import {
   CapElectronEventEmitter,
@@ -47,6 +50,7 @@ import { randomUUID } from 'crypto';
 import { pipeline } from 'stream/promises';
 import { pathToFileURL } from 'url';
 import { materializeReticulumResourceForOpen } from './reticulum-resource-open';
+import { openLocalPath } from './desktop-shell';
 import { installDisplayMediaPicker } from './display-media-picker';
 import {
   DEV_LOGS_DISABLED_STORAGE_KEY,
@@ -1164,8 +1168,8 @@ export class ElectronCapacitorApp {
       guest.on('will-redirect', (event, nextUrl, _inPlace, isMainFrame) => {
         if (isMainFrame && !allowedGuestUrl(nextUrl)) event.preventDefault();
       });
-      guest.on('did-start-navigation', (_event, _url, inPlace, mainFrame) => {
-        if (mainFrame && !inPlace) {
+      guest.on('did-frame-navigate', (_event, _url, _code, _status, mainFrame) => {
+        if (mainFrame) {
           const owner = attachedQAppGuests.get(guest.id)?.prepared?.owner;
           if (owner) void cleanupQAppOwner(owner);
         }
@@ -1390,6 +1394,15 @@ export function setupContentSecurityPolicy(
   targetSession.webRequest.onHeadersReceived(
     (details: any, callback) => {
       const requestUrl = details.url;
+      // The file executor has no page scripts or embedded content. Never replace
+      // its policy with the permissive policy required by untrusted Q-Apps.
+      if (requestUrl === QAPP_FILE_WORKER_URL) {
+        callback({ responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [QAPP_FILE_WORKER_CSP],
+        } });
+        return;
+      }
       const expandedDomains = [...domainHolder.allowedDomains];
       for (const d of domainHolder.allowedDomains) {
         try {
@@ -3031,6 +3044,10 @@ setInterval(() => { void qappFileSaves?.expire(); }, 30_000).unref();
 app.on('before-quit', () => { void qappFileSaves?.cleanup(); });
 
 async function cleanupQAppOwner(owner: QAppReticulumOwner): Promise<void> {
+  for (const attached of attachedQAppGuests.values()) {
+    if (attached.prepared && qappGuestOwnerKey(attached.prepared.owner) === qappGuestOwnerKey(owner))
+      qappFileWorkers.releaseGuest(attached.contents);
+  }
   // All managers snapshot their old resources before any shutdown is awaited.
   await Promise.allSettled([
     privateChannelManager?.cleanupOwner(owner),
@@ -3049,9 +3066,10 @@ type PreparedQAppGuest = {
   preloadTokenUrl: string;
 };
 const preparedQAppGuests = new Map<string, PreparedQAppGuest>();
-const attachedQAppGuests = new Map<number, { contents: WebContents; prepared: PreparedQAppGuest | null }>();
+const attachedQAppGuests = new Map<number, { contents: WebContents; prepared: PreparedQAppGuest | null; documentId?: string }>();
+const qappFileWorkers = new QAppFileWorkers();
 const configuredQAppSessions = new Set<string>();
-const qappGuestPreloadPath = join(__dirname, 'qapp-guest-preload.js');
+const qappGuestPreloadPath = join(__dirname, 'qapp-guest-preload.bundle.js');
 
 function qappGuestOwnerKey(owner: QAppGuestOwner): string {
   return `${owner.tabId}\u0000${owner.service}\u0000${owner.name}`;
@@ -3101,11 +3119,12 @@ ipcMain.handle('qappGuest:prepare', (event, owner: QAppGuestOwner, url: string, 
   };
 });
 
-ipcMain.handle('qappGuest:hello', (event, guestToken: string) => {
+ipcMain.handle('qappGuest:hello', (event, guestToken: string, documentId: string) => {
   if (event.sender.getType() !== 'webview' ||
       event.senderFrame !== event.sender.mainFrame ||
       typeof guestToken !== 'string' ||
-      !/^[a-f0-9-]{36}$/.test(guestToken))
+      !/^[a-f0-9-]{36}$/.test(guestToken) ||
+      typeof documentId !== 'string' || !/^[a-f0-9]{32}$/.test(documentId))
     throw new Error('QAPP_PERMISSION_DENIED');
   const prepared = [...preparedQAppGuests.values()].find(
     (candidate) => candidate.guestToken === guestToken
@@ -3125,7 +3144,26 @@ ipcMain.handle('qappGuest:hello', (event, guestToken: string) => {
   ))
     throw new Error('QAPP_GUEST_MISMATCH');
   attached.prepared = prepared;
+  if (attached.documentId && attached.documentId !== documentId)
+    qappFileWorkers.releaseGuest(event.sender);
+  attached.documentId = documentId;
   return true;
+});
+
+ipcMain.handle('qappFiles:open', async (event, documentId, requestId, bytes, files) => {
+  const attached = attachedQAppGuests.get(event.sender.id);
+  const prepared = attached?.prepared;
+  if (!isQAppFileGuest(event, attached,
+      prepared && preparedQAppGuests.get(qappGuestOwnerKey(prepared.owner)),
+      prepared && session.fromPartition(prepared.partition), documentId))
+    throw new Error('QAPP_PERMISSION_DENIED');
+  try {
+    await qappFileWorkers.open(event.sender, myCapacitorApp.getMainWindow().webContents,
+      attached.prepared.partition, documentId, requestId, bytes, files);
+  } catch (error) {
+    if (error?.message === 'QAPP_BRIDGE_BUSY') return { busy: true };
+    throw error;
+  }
 });
 
 ipcMain.handle('qappGuest:release', (event, owner: QAppGuestOwner) => {
@@ -3136,6 +3174,7 @@ ipcMain.handle('qappGuest:release', (event, owner: QAppGuestOwner) => {
   for (const [guestId, attached] of attachedQAppGuests) {
     if (!attached.prepared || qappGuestOwnerKey(attached.prepared.owner) !== key)
       continue;
+    qappFileWorkers.releaseGuest(attached.contents);
     attachedQAppGuests.delete(guestId);
   }
   void cleanupQAppOwner(owner);
@@ -4641,7 +4680,10 @@ ipcMain.handle(
   }
 );
 
-ipcMain.handle('reticulumChat:clearLocalAccountState', async () => {
+ipcMain.handle('reticulumChat:clearLocalAccountState', async (event) => {
+  validateQAppReticulumIpcSender(event);
+  if (event.senderFrame !== event.sender.mainFrame) throw new Error('QAPP_PERMISSION_DENIED');
+  qappFileWorkers.releaseAll();
   await qappFileSaves?.cleanup();
   setRelayAccount('', true);
   reticulumLocalAccountLifecycleGeneration += 1;
@@ -6163,7 +6205,7 @@ ipcMain.handle(
           suggestedFileName,
           fallbackFileName: manifest.fileName || 'attachment.bin',
         });
-        const openError = await shell.openPath(openPath);
+        const openError = await openLocalPath(openPath, shell);
         if (openError) {
           return { success: false, error: openError };
         }
