@@ -136,6 +136,7 @@ export async function buildWindowsCross() {
   if (fs.existsSync(path.join(electron, 'app/hub-config.json')))
     throw new Error('Hosted configuration leaked into desktop renderer.');
   run('npm', ['exec', '--no', '--', 'tsc'], electron);
+  run('npm', ['run', 'build:qapp-preload'], electron);
   run('npm', ['run', 'build:private-transport'], electron);
   const runtime = path.join(electron, '.build/cross-reticulum');
   fs.mkdirSync(runtime, { recursive: true });
@@ -200,7 +201,7 @@ export async function buildWindowsCross() {
   const smoke = (exe, packageFile, file) => {
     // Wine console handles can be unavailable in headless mode. File output also
     // lets us reject a zero exit without proof that Electron loaded the addons.
-    const script = `const r=require('node:module').createRequire(${JSON.stringify(winPath(packageFile))}); const D=r('better-sqlite3'); const db=new D(':memory:'); const row=db.prepare('select sqlite_version() as sqlite').get(); db.close(); r('sharp')({create:{width:1,height:1,channels:4,background:'white'}}).png().toBuffer().then(p=>{if(p.length<8)throw Error('PNG failed'); require('fs').writeFileSync(${JSON.stringify(winPath(file))},JSON.stringify({platform:process.platform,arch:process.arch,electron:process.versions.electron,...row,sharp:r('sharp').versions.sharp}));}).catch(()=>process.exit(1));`;
+    const script = `const r=require('node:module').createRequire(${JSON.stringify(winPath(packageFile))}); const fs=require('node:fs'); const path=require('node:path'); const preloads=['qapp-guest-preload.bundle.js','qapp-file-worker-preload.bundle.js']; for(const name of preloads){if(!fs.readFileSync(path.join(path.dirname(${JSON.stringify(winPath(packageFile))}),'build/src',name)).length)throw Error('Missing Q-App preload');} const D=r('better-sqlite3'); const db=new D(':memory:'); const row=db.prepare('select sqlite_version() as sqlite').get(); db.close(); r('sharp')({create:{width:1,height:1,channels:4,background:'white'}}).png().toBuffer().then(p=>{if(p.length<8)throw Error('PNG failed'); fs.writeFileSync(${JSON.stringify(winPath(file))},JSON.stringify({platform:process.platform,arch:process.arch,electron:process.versions.electron,...row,sharp:r('sharp').versions.sharp,qappPreloads:preloads}));}).catch(()=>process.exit(1));`;
     run('wine', [exe, '-e', script], electron, false, {
       ELECTRON_RUN_AS_NODE: '1',
     });
@@ -210,7 +211,8 @@ export async function buildWindowsCross() {
       proof.arch !== 'x64' ||
       proof.electron !== version ||
       !proof.sqlite ||
-      !proof.sharp
+      !proof.sharp ||
+      proof.qappPreloads?.length !== 2
     )
       throw new Error('Windows Electron native addon smoke failed.');
     return proof;

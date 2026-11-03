@@ -65,7 +65,8 @@ cross-compiles the Go transport. Windows Python under Wine freezes Reticulum
 from the resolved Philreact source revision. It retains only the Windows x64
 SQLite prebuild and installs Windows Sharp optional dependencies. A real
 Windows Electron process under Wine exercises SQLite and PNG generation before
-and after packaging; a missing/incompatible addon fails the build. This path
+and after packaging, and verifies both bundled Q-App preloads are present; a
+missing preload or incompatible addon fails the build. This path
 does not invoke a Linux rebuild of Windows native modules.
 
 NSIS setup and portable launchers use x86 PE stubs even for x64 applications.
