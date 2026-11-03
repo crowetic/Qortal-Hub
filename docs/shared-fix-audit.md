@@ -75,3 +75,35 @@ Keep the previous frontend package and backend release. For recovery, restore
 the frontend on every origin and run the generated backend installer with
 `--rollback` and the same target-specific options used during installation.
 Preserve the existing data directory; this backport does not migrate its schema.
+
+## Test release alignment on 2026-11-02
+
+Selected shared fixes from upstream `develop` through `a9588f4d`, matching the
+regular desktop test source on `main` (`b6c87277`). The browser now preserves
+binary Q-App data and file objects, validates publish storage, decrypts streamed
+AES-CTR at exact byte offsets, and retains Core-compatible Q-App punctuation.
+The group security panel now manages keys with the latest admin checks and
+popover behavior. Chat welcome/unread rows use the upstream layout fixes.
+
+The shared Reticulum store caps its free-space reserve at 4 GiB and stops a
+resource download on disk exhaustion instead of repeatedly requesting it.
+Binary Reticulum sends preserve each ArrayBuffer/view's actual byte range.
+The standalone daemon receives the same storage/transfer fixes separately.
+
+Hosted iframe source/origin checks, per-wallet runtime isolation, embedded
+NuQloud calendar/manager controls and browser signing boundaries are preserved.
+The file-reference browser contracts are shared, but Electron guest workers,
+window openers and desktop packaging remain outside the hosted runtime.
+Pirate Core error handling and pending coin-send fixes remain included; no
+Pirate native/local signing implementation is introduced. The existing daemon
+Python dependency pin and database schema are unchanged.
+
+Validation: 2,664 JavaScript tests passed (102 skipped), 586 selected standalone
+resource/chat tests passed (74 skipped), all three real hosted daemon tests and
+both standalone daemon tests passed, and all 14 hosted packaging tests passed.
+Both browser entries and the Electron TypeScript check passed. Locale files are
+sorted; all 15 imported English key changes have translations in every locale.
+Changed-file lint retains six existing constant-loop findings across
+`get.ts` and `downloadFromLocation.ts`; both were compared with this branch
+before the backport, with no new lint findings. The previous audit's
+target-specific build, readiness and rollback steps above still apply. No service was deployed or restarted by this update.

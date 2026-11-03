@@ -1,4 +1,5 @@
 import { isHostedQappMessage } from '../hosted/qapp-frame';
+import { attachQAppRequestBridge } from '../qortal/qapp-guest-request-bridge';
 import { useCallback, useEffect, useState } from 'react';
 import { executeEvent } from '../utils/events';
 import {
@@ -9,7 +10,7 @@ import {
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { saveFile } from '../qortal/get';
 import { mimeToExtensionMap } from '../utils/memeTypes';
-import FileSaver from 'file-saver';
+import i18n from '../i18n/i18n';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { QORTAL_PROTOCOL } from '../constants/constants';
 import { qappRequestTimeout } from '../qortal/qapp-request-timeout';
@@ -490,41 +491,6 @@ async function deleteQortalFilesFromIndexedDB() {
   }
 }
 
-export const showSaveFilePicker = async (
-  data,
-  { openSnackGlobal, setOpenSnackGlobal, infoSnackCustom, setInfoSnackCustom }
-) => {
-  try {
-    const { filename, mimeType, blob, fileHandleOptions } = data;
-
-    setInfoSnackCustom({
-      type: 'info',
-      message: 'Saving file...',
-    });
-
-    setOpenSnackGlobal(true);
-
-    FileSaver.saveAs(blob, filename);
-
-    setInfoSnackCustom({
-      type: 'success',
-      message: 'Saving file success!',
-    });
-
-    setOpenSnackGlobal(true);
-  } catch (error) {
-    setInfoSnackCustom({
-      type: 'error',
-      message: error?.message
-        ? `Error saving file: ${error?.message}`
-        : 'Error saving file',
-    });
-
-    setOpenSnackGlobal(true);
-    console.error('Error saving file:', error);
-  }
-};
-
 declare var cordova: any;
 
 async function storeFilesInIndexedDB(obj) {
@@ -607,7 +573,8 @@ export const useQortalMessageListener = (
   appService,
   appIdentifier,
   nativeViewRef,
-  nativeGuestActive
+  nativeGuestActive,
+  guestDocumentId
 ) => {
   const [path, setPath] = useState('');
   const [history, setHistory] = useState({
@@ -888,7 +855,7 @@ export const useQortalMessageListener = (
         } catch (error) {
           eventPort.postMessage({
             result: null,
-            error: error?.message || 'Failed to save file',
+            error: error?.message || i18n.t('question:stream_save.failed'),
           });
         }
       } else if (
@@ -993,30 +960,9 @@ export const useQortalMessageListener = (
     };
 
     const nativeView = nativeGuestActive ? nativeViewRef?.current : null;
-    const nativeListener = (event) => {
-      if (event.target !== nativeView || event.channel !== 'qapp:request') return;
-      const request = event.args?.[0];
-      if (
-        typeof request?.documentId !== 'string' ||
-        request.documentId.length > 128 ||
-        !Number.isSafeInteger(request?.requestId) ||
-        request.requestId < 1 ||
-        !request.data ||
-        typeof request.data !== 'object'
-      ) return;
-      const port = {
-        postMessage: (result) => {
-          if (nativeView.isConnected)
-            nativeView.send('qapp:response', {
-              documentId: request.documentId,
-              requestId: request.requestId,
-              result,
-            });
-        },
-      };
-      void listener({ data: request.data, ports: [port] });
-    };
-    nativeView?.addEventListener('ipc-message', nativeListener);
+    const releaseNativeBridge = nativeView && guestDocumentId
+      ? attachQAppRequestBridge(nativeView, guestDocumentId, listener)
+      : undefined;
     const browserListener = (event: MessageEvent) => {
       const frame = nativeViewRef?.current as HTMLIFrameElement | undefined;
       if (!(window as Window & { hubHosted?: boolean }).hubHosted || nativeGuestActive ||
@@ -1024,13 +970,18 @@ export const useQortalMessageListener = (
       void listener(event);
     };
     window.addEventListener('message', browserListener);
-
-    // Cleanup function to remove the event listener when the component is unmounted
     return () => {
-      nativeView?.removeEventListener('ipc-message', nativeListener);
+      releaseNativeBridge?.();
       window.removeEventListener('message', browserListener);
     };
-  }, [isDevMode, appName, appService, tabId, nativeGuestActive]);
+  }, [
+    isDevMode,
+    appName,
+    appService,
+    tabId,
+    nativeGuestActive,
+    guestDocumentId,
+  ]);
 
   useEffect(() => {
     const api = window.electronAPI;

@@ -6,7 +6,7 @@ it('keeps encoded Q-App names on the expected hosted frame origin', () => {
   const frame = document.createElement('iframe');
   frame.src = buildAppRenderRoot('https://qdn.test', 'APP', 'alice + bob?#');
   document.body.append(frame);
-  expect(frame.src).toBe('https://qdn.test/render/APP/alice%20%2B%20bob%3F%23');
+  expect(frame.src).toBe('https://qdn.test/render/APP/alice%20+%20bob%3F%23');
   const event = {
     source: frame.contentWindow,
     origin: 'https://qdn.test',
