@@ -129,6 +129,14 @@
     "return_to_chat": "Palaa keskusteluun"
   },
   "nuqloud": {
+    "direct_messages": "Yksityisviestit",
+    "dm_empty": "Ei vielä yksityiskeskusteluja.",
+    "dm_invalid_peer": "Anna kelvollinen Qortal-osoite tai täsmällinen rekisteröity nimi.",
+    "dm_list": "Keskustelut",
+    "dm_open": "Avaa keskustelu",
+    "dm_recipient": "Qortal-nimi tai -osoite",
+    "dm_unread": "Lukematta: {{count}}",
+    "groups": "Ryhmät",
     "no_groups": "Liity Qortal-ryhmään aloittaaksesi keskustelun.",
     "request_failed": "Keskustelupyyntöä ei voitu suorittaa. Tarkista yhteyden tila ja yritä uudelleen.",
     "session_ended": "Keskusteluistuntosi päättyi. Avaa lompakkosi lukitus tai päivitä sivu.",

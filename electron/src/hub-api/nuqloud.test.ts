@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import {
   mkdtempSync,
@@ -130,6 +131,66 @@ describe('NuQloud account-bound native chat transport', () => {
     await expect(f.api.request({ method: 'poll', args: [-1] })).rejects.toThrow(
       'invalid_cursor'
     );
+  });
+  it('keeps direct event queues and history behind the separate participant-bound entry', async () => {
+    const f = fixture();
+    const conversationId = createHash('sha256')
+      .update('rchat-dm-v1:Q-owned:Q-peer')
+      .digest('hex');
+    (f.manager as any).getDirectHistory = () => [{ eventId: 'owned-direct' }];
+    f.manager.emit('directEvent', {
+      event: {
+        eventId: 'direct-owned',
+        senderAddress: 'Q-peer',
+        recipientAddress: 'Q-owned',
+        conversationId,
+      },
+    });
+    f.manager.emit('directEvent', {
+      event: {
+        eventId: 'foreign',
+        senderAddress: 'Q-other',
+        recipientAddress: 'Q-peer',
+        conversationId,
+      },
+    });
+    expect(
+      ((await f.api.request({ method: 'poll', args: [0] })) as any).events
+    ).toEqual([]);
+    const direct: any = await f.api.request(
+      { method: 'pollDirect', args: [0] },
+      true
+    );
+    expect(
+      direct.events.map((item: any) => item.payload.event.eventId)
+    ).toEqual(['direct-owned']);
+    await expect(
+      f.api.request({ method: 'getDirectHistory', args: ['Q-owned', 'Q-peer'] })
+    ).rejects.toThrow('chat_method_not_allowed');
+    await expect(
+      f.api.request(
+        { method: 'getDirectHistory', args: ['Q-other', 'Q-peer'] },
+        true
+      )
+    ).rejects.toThrow('hub_account_mismatch');
+    await expect(
+      f.api.request({ method: 'publishDirectEvent', args: [{}] }, true)
+    ).rejects.toThrow('scope_required');
+    await expect(
+      f.api.request({ method: 'getHistory', args: [716, 'general'] }, true)
+    ).rejects.toThrow('chat_method_not_allowed');
+    expect(
+      await f.api.request(
+        { method: 'getDirectHistory', args: ['Q-owned', 'Q-peer'] },
+        true
+      )
+    ).toEqual([{ eventId: 'owned-direct' }]);
+    await expect(
+      f.api.request({ method: 'listSilences', args: ['Q-owned', 'dm'] })
+    ).rejects.toThrow('scope_required');
+    await expect(
+      f.api.request({ method: 'getSilence', args: ['Q-owned', 'Q-peer', 'dm'] })
+    ).rejects.toThrow('scope_required');
   });
   it('serves only bounded build assets and refuses traversal and symlink escapes', async () => {
     const f = fixture();
@@ -301,8 +362,18 @@ describe('NuQloud account-bound native chat transport', () => {
       expect((await request('read', 'poll')).status).toBe(200);
       expect((await request('read', 'upload:begin')).status).toBe(403);
       expect((await request('write', 'upload:begin')).status).toBe(403);
-      expect(calls).toBe(1);
-      expect(scopes).toEqual(['QCHAT_READ', 'QCHAT_READ', 'QCHAT_PUBLISH']);
+      expect((await request('direct/read', 'pollDirect')).status).toBe(200);
+      expect((await request('direct/write', 'publishDirectEvent')).status).toBe(
+        200
+      );
+      expect(calls).toBe(3);
+      expect(scopes).toEqual([
+        'QCHAT_READ',
+        'QCHAT_READ',
+        'QCHAT_PUBLISH',
+        'QCHAT_DM_READ',
+        'QCHAT_DM_PUBLISH',
+      ]);
     } finally {
       await api.close();
     }

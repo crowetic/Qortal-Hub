@@ -8,6 +8,8 @@ import { execFileSync } from 'node:child_process';
 
 const root = __dirname;
 const substitutions = new Map([
+  ['src/context/VoiceCallContext', 'src/nuqloud/calls.ts'],
+  ['src/contexts/CallSwitchGuardContext', 'src/nuqloud/calls.ts'],
   ['src/App', 'src/nuqloud/app.ts'],
   ['src/utils/globalApi', 'src/nuqloud/globalApi.ts'],
   ['src/background/background', 'src/nuqloud/background.ts'],

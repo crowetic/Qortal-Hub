@@ -129,6 +129,14 @@
     "return_to_chat": "チャットに戻る"
   },
   "nuqloud": {
+    "direct_messages": "ダイレクトメッセージ",
+    "dm_empty": "まだダイレクトメッセージはありません。",
+    "dm_invalid_peer": "有効なQortalアドレスまたは登録名を正確に入力してください。",
+    "dm_list": "会話",
+    "dm_open": "チャットを開く",
+    "dm_recipient": "Qortalの名前またはアドレス",
+    "dm_unread": "未読: {{count}}",
+    "groups": "グループ",
     "no_groups": "Qortalグループに参加してチャットを始めましょう。",
     "request_failed": "チャットのリクエストを完了できませんでした。接続状態を確認して、もう一度お試しください。",
     "session_ended": "チャットセッションが終了しました。ウォレットのロックを解除するか、ページを更新してください。",

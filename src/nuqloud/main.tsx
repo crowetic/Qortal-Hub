@@ -27,7 +27,10 @@ import {
   onChatEvent,
   parentRequest,
   rpc,
+  enableDirectChat,
 } from './bridge';
+import { DirectChats } from './direct';
+import { validateAddress } from '../utils/validateAddress';
 import { ChatGroup } from '../components/Chat/ChatGroup';
 import { ThemeProvider } from '../components/Theme/ThemeContext';
 import { MessageQueueProvider } from '../messaging/MessageQueueContext';
@@ -50,16 +53,23 @@ function Chat() {
   const { t } = useTranslation(['reticulum', 'group', 'core']);
   const [groupId, setGroupId] = useState(configuration.groups[0]?.groupId || 0);
   const [notice, setNotice] = useState('');
+  const [direct, setDirect] = useState(false);
+  const [directPeer, setDirectPeer] = useState('');
+  const openDirect = async (peer = '') => {
+    try {
+      await enableDirectChat();
+      setDirectPeer(peer);
+      setDirect(true);
+    } catch {
+      setNotice(t('reticulum:nuqloud.request_failed'));
+    }
+  };
   const [groups, setGroups] = useState(configuration.groups);
   const [authority, setAuthority] = useState({ groupId: 0, isAdmin: false });
   const [membersOpen, setMembersOpen] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
   useEffect(() => {
-    const events = [
-      'openDirectMessageInternal',
-      'openPaymentInternal',
-      'openUserLookupDrawer',
-    ];
+    const events = ['openPaymentInternal', 'openUserLookupDrawer'];
     const unavailable = () => setNotice(t('reticulum:nuqloud.unsupported'));
     const openApp = (event: CustomEvent) => {
       const url = qortalAppLink(event.detail?.data);
@@ -73,10 +83,17 @@ function Chat() {
     };
     for (const event of events) subscribeToEvent(event, unavailable);
     subscribeToEvent('addTab', openApp);
+    const dm = (event: CustomEvent) => {
+      const peer = event.detail?.address || event.detail?.data?.address;
+      if (validateAddress(peer)) void openDirect(peer);
+      else unavailable();
+    };
+    subscribeToEvent('openDirectMessageInternal', dm);
     subscribeToEvent('globalActionJoinGroup', joinGroup);
     return () => {
       for (const event of events) unsubscribeFromEvent(event, unavailable);
       unsubscribeFromEvent('addTab', openApp);
+      unsubscribeFromEvent('openDirectMessageInternal', dm);
       unsubscribeFromEvent('globalActionJoinGroup', joinGroup);
     };
   }, [t]);
@@ -180,36 +197,51 @@ function Chat() {
         <Box
           sx={{
             display: 'flex',
+            flexWrap: { xs: 'wrap', sm: 'nowrap' },
             alignItems: 'center',
-            gap: 2,
+            gap: { xs: 1, sm: 2 },
             px: 2,
             py: 1,
             borderBottom: 1,
             borderColor: 'divider',
           }}
         >
-          <Typography
-            component="label"
-            htmlFor="nuqloud-group"
-            sx={{ display: { xs: 'none', sm: 'block' } }}
+          <Button onClick={() => setDirect(false)} aria-pressed={!direct}>
+            {t('reticulum:nuqloud.groups')}
+          </Button>
+          <Button
+            onClick={() => void openDirect()}
+            disabled={!configuration.features?.direct}
+            aria-pressed={direct}
           >
-            {t('reticulum:nuqloud.your_groups')}
-          </Typography>
-          <Select
-            id="nuqloud-group"
-            size="small"
-            value={groupId || ''}
-            disabled={!groups.length}
-            onChange={(event) => setGroupId(Number(event.target.value))}
-            inputProps={{ 'aria-label': t('reticulum:nuqloud.your_groups') }}
-            sx={{ minWidth: 0, flex: 1, maxWidth: 480 }}
-          >
-            {groups.map((item) => (
-              <MenuItem key={item.groupId} value={item.groupId}>
-                {item.groupName || item.groupId}
-              </MenuItem>
-            ))}
-          </Select>
+            {t('reticulum:nuqloud.direct_messages')}
+          </Button>
+          {!direct && (
+            <Typography
+              component="label"
+              htmlFor="nuqloud-group"
+              sx={{ display: { xs: 'none', sm: 'block' } }}
+            >
+              {t('reticulum:nuqloud.your_groups')}
+            </Typography>
+          )}
+          {!direct && (
+            <Select
+              id="nuqloud-group"
+              size="small"
+              value={groupId || ''}
+              disabled={!groups.length}
+              onChange={(event) => setGroupId(Number(event.target.value))}
+              inputProps={{ 'aria-label': t('reticulum:nuqloud.your_groups') }}
+              sx={{ minWidth: 120, flex: 1, maxWidth: 480 }}
+            >
+              {groups.map((item) => (
+                <MenuItem key={item.groupId} value={item.groupId}>
+                  {item.groupName || item.groupId}
+                </MenuItem>
+              ))}
+            </Select>
+          )}
           <Button
             size="small"
             onClick={() => {
@@ -229,7 +261,9 @@ function Chat() {
             overflow: 'hidden',
           }}
         >
-          {group ? (
+          {direct ? (
+            <DirectChats initialPeer={directPeer} />
+          ) : group ? (
             <ChatGroup
               key={`${configuration.context}:${groupId}`}
               selectedGroup={String(groupId)}

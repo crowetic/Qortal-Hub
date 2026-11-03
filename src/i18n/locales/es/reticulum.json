@@ -129,6 +129,14 @@
     "return_to_chat": "Volver al chat"
   },
   "nuqloud": {
+    "direct_messages": "Mensajes directos",
+    "dm_empty": "Aún no hay conversaciones privadas.",
+    "dm_invalid_peer": "Introduce una dirección de Qortal válida o un nombre registrado exacto.",
+    "dm_list": "Conversaciones",
+    "dm_open": "Abrir chat",
+    "dm_recipient": "Nombre o dirección de Qortal",
+    "dm_unread": "Sin leer: {{count}}",
+    "groups": "Grupos",
     "no_groups": "Únete a un grupo de Qortal para empezar a chatear.",
     "request_failed": "No se pudo completar la solicitud del chat. Comprueba el estado de la conexión e inténtalo de nuevo.",
     "session_ended": "Tu sesión de chat ha terminado. Desbloquea tu cartera o actualiza la página.",

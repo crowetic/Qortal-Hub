@@ -387,6 +387,9 @@ export function useReticulumDirectChat(
         });
     };
     void refreshHistory();
+    const offResync = (window.reticulumChat as any)?.onDirectResync?.(
+      () => void refreshHistory()
+    );
     const off = window.reticulumChat?.onDirectEvent?.(({ event }) => {
       const candidate = event as ReticulumDmEvent;
       if (!candidate) return;
@@ -503,6 +506,7 @@ export function useReticulumDirectChat(
     return () => {
       cancelled = true;
       activeConversationGenerationRef.current += 1;
+      offResync?.();
       off?.();
       offTyping?.();
       offSilence?.();

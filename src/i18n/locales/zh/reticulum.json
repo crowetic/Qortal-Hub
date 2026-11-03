@@ -129,6 +129,14 @@
     "return_to_chat": "返回聊天"
   },
   "nuqloud": {
+    "direct_messages": "私信",
+    "dm_empty": "暂无私信会话。",
+    "dm_invalid_peer": "请输入有效的Qortal地址或准确的注册名称。",
+    "dm_list": "会话",
+    "dm_open": "打开聊天",
+    "dm_recipient": "Qortal名称或地址",
+    "dm_unread": "未读：{{count}}",
+    "groups": "群组",
     "no_groups": "加入Qortal群组以开始聊天。",
     "request_failed": "无法完成聊天请求。请检查连接状态后重试。",
     "session_ended": "聊天会话已结束。请解锁钱包或刷新页面。",

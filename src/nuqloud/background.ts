@@ -113,7 +113,9 @@ export const addDataPublishes = unavailable,
 
 export async function background(action: string, data: any = {}) {
   if (action === 'signReticulumChatEvent')
-    return parentRequest('sign', { event: data });
+    return parentRequest(data?.conversationId ? 'directSign' : 'sign', {
+      event: data,
+    });
   if (action === 'userInfo') return configuration.account;
   if (
     action === 'getTimestampEnterChat' ||

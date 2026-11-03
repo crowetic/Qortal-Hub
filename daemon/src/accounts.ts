@@ -112,6 +112,26 @@ export class AccountRegistry {
     );
     if (permission.effective !== true)
       throw new HubApiError(403, 'scope_required');
+    if (scope.startsWith('QCHAT_DM_')) {
+      const unlock = await requestJson(
+        `${auth}/wallet/unlock/status?walletId=${encodeURIComponent(walletId)}`,
+        token
+      );
+      if (
+        unlock.unlocked !== true ||
+        !Number.isFinite(unlock.expiresAt) ||
+        unlock.expiresAt <= Date.now()
+      )
+        throw new HubApiError(403, 'wallet_locked');
+      for (const required of ['QCHAT_READ', 'QCHAT_DM_READ']) {
+        const extra = await requestJson(
+          `${auth}/permissions/status?walletId=${encodeURIComponent(walletId)}&scope=${required}`,
+          token
+        );
+        if (extra.effective !== true)
+          throw new HubApiError(403, 'scope_required');
+      }
+    }
     if (this.closed) throw new HubApiError(503, 'shutting_down');
     const principal = { address: wallet.address0, publicKey: wallet.publicKey };
     let pending = this.workers.get(walletId);

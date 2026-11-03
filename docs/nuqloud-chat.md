@@ -1,13 +1,13 @@
 # NuQloud embedded Q-Chat
 
 The `hosted-access` branch provides `npm run build:nuqloud`, a chat-only browser
-entry for NuQloud. It reuses `ChatGroup`, the message list, TipTap editor and native
+entry for NuQloud. It reuses `ChatGroup`, `ChatDirect`, the message list, TipTap editor and native
 chat services. `src/nuqloud` replaces shell/backend dependencies through the
 specialized Vite configuration. The ordinary desktop and full hosted-browser
 entries keep their existing defaults.
 
 NuQloud owns login, linked-account selection, unlock, permissions and the parent
-frame. External Auth signs constrained native group events; wallet keys and app
+frame. External Auth signs constrained native group and direct events; wallet keys and app
 bearers stay on the server. The existing Auth-wallet account worker/database is
 used. This does not provision a hosted-browser installation identity or transfer
 wallet keys into this entry.
@@ -137,3 +137,29 @@ checks a separately signed received image without a legacy reference, acquisitio
 decoding, forced read failure/Retry and actual sandboxed link navigation. The
 network boundary is controlled locally; live-peer delivery requires acceptance
 through the owner's Git/recreate deployment workflow.
+
+
+## Direct conversations
+
+The NuQloud DM entry reuses ChatDirect behind explicit QCHAT_DM_READ and
+QCHAT_DM_PUBLISH consent, retaining baseline QCHAT_READ for the account worker.
+Auth signs native and stream-less legacy envelopes after validating the owned
+sender, recipient, deterministic conversation, timestamp, payload hash and daemon
+stream. The separate `/v1/nuqloud/direct/read` and `/write` endpoints require DM
+scopes, baseline read and a fresh owned-wallet unlock. The NuQloud RPC method
+namespace is `dm:`. Group polling never exposes private events; direct polling
+filters both participants and the exact conversation. Queue overflow/reconnect
+refreshes direct history/summaries. The old group RPC allowlist remains separate.
+
+Daemon `nuqloudDirectTransport=1` and Auth `directChatUI=1` negotiate the direct
+entry; older combinations disable its control. Existing histories and native wire
+formats stay authoritative. DM text/rich messages, replies, reactions, own edits,
+deletion, expiry and read state are available; DM file uploads, voice calls and
+friend management remain hidden. Only the latest native 200-event history window
+is exposed by the reused component. Local acceptance or an optimistic display
+does not prove peer delivery. Keys and app credentials remain in Auth.
+
+Build renderer/daemon together and update platform app 0.1.70+, broker and Auth
+main alongside hosted-access. No new schema is required. Source changes do not
+authorize deployment; use the platform's documented owner lifecycle/readiness
+and retain wallets, signed histories/resources and transaction receipts on recovery.

@@ -323,6 +323,7 @@ export const ChatDirect = ({
   isActive = true,
   reticulumEnabled = true,
   reticulumChatEnabled = false,
+  embeddedCapabilities = { calls: true, resources: true, friends: true },
 }) => {
   const userInfo = useAtomValue(userInfoAtom);
   const balance = useAtomValue(balanceAtom);
@@ -536,6 +537,11 @@ export const ChatDirect = ({
   useEffect(() => {
     const ownerAddress = String(myAddress || '').trim();
     const peerAddress = String(selectedDirect?.address || '').trim();
+    if (!embeddedCapabilities.calls) {
+      setReticulumDirectCallHistory([]);
+      setReticulumDirectCallHistoryReady(true);
+      return;
+    }
     if (!reticulumDirectUiEnabled || !ownerAddress || !peerAddress) {
       setReticulumDirectCallHistory([]);
       setReticulumDirectCallHistoryReady(false);
@@ -565,7 +571,12 @@ export const ChatDirect = ({
       cancelled = true;
       off?.();
     };
-  }, [myAddress, reticulumDirectUiEnabled, selectedDirect?.address]);
+  }, [
+    myAddress,
+    reticulumDirectUiEnabled,
+    selectedDirect?.address,
+    embeddedCapabilities.calls,
+  ]);
 
   const reticulumDirectMessagesWithCalls = useMemo(() => {
     if (!reticulumDirectUiEnabled || reticulumDirectCallHistory.length === 0) {
@@ -3037,39 +3048,41 @@ export const ChatDirect = ({
                 </Typography>
               </Box>
             </Tooltip>
-            <Tooltip
-              title={
-                dmFriendsByAddress[selectedDirect.address]
-                  ? t('core:dm_friends.remove_friend', {
-                      postProcess: 'capitalizeFirstChar',
-                    })
-                  : t('core:dm_friends.add_friend', {
-                      postProcess: 'capitalizeFirstChar',
-                    })
-              }
-            >
-              <span>
-                <IconButton
-                  size="small"
-                  disabled={friendActionBusy}
-                  onClick={() =>
-                    handleToggleDmFriend(
-                      selectedDirect.address,
-                      selectedDirect.name,
-                      Boolean(dmFriendsByAddress[selectedDirect.address])
-                    )
-                  }
-                  sx={{ color: 'text.secondary' }}
-                >
-                  {dmFriendsByAddress[selectedDirect.address] ? (
-                    <PersonRemoveRoundedIcon sx={{ fontSize: 20 }} />
-                  ) : (
-                    <PersonAddRoundedIcon sx={{ fontSize: 20 }} />
-                  )}
-                </IconButton>
-              </span>
-            </Tooltip>
-            {reticulumEnabled && (
+            {embeddedCapabilities.friends && (
+              <Tooltip
+                title={
+                  dmFriendsByAddress[selectedDirect.address]
+                    ? t('core:dm_friends.remove_friend', {
+                        postProcess: 'capitalizeFirstChar',
+                      })
+                    : t('core:dm_friends.add_friend', {
+                        postProcess: 'capitalizeFirstChar',
+                      })
+                }
+              >
+                <span>
+                  <IconButton
+                    size="small"
+                    disabled={friendActionBusy}
+                    onClick={() =>
+                      handleToggleDmFriend(
+                        selectedDirect.address,
+                        selectedDirect.name,
+                        Boolean(dmFriendsByAddress[selectedDirect.address])
+                      )
+                    }
+                    sx={{ color: 'text.secondary' }}
+                  >
+                    {dmFriendsByAddress[selectedDirect.address] ? (
+                      <PersonRemoveRoundedIcon sx={{ fontSize: 20 }} />
+                    ) : (
+                      <PersonAddRoundedIcon sx={{ fontSize: 20 }} />
+                    )}
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
+            {reticulumEnabled && embeddedCapabilities.calls && (
               <Tooltip
                 title={
                   callMatchesThisDirect && callState === 'connected'
@@ -3753,7 +3766,9 @@ export const ChatDirect = ({
             isChat
             disableEnter={false}
             setIsFocusedParent={setIsFocusedParent}
-            insertFiles={insertFiles}
+            insertFiles={
+              embeddedCapabilities.resources ? insertFiles : undefined
+            }
             compactChat={reticulumDirectUiEnabled}
             collapseFormattingTraySignal={formattingTrayResetKey}
             placeholder={
@@ -3919,6 +3934,9 @@ export const ChatDirect = ({
               </>
             )}
             <CustomButton
+              component="button"
+              type="button"
+              aria-label={t('group:dashboard.send')}
               onClick={() => {
                 if (
                   isSending ||
@@ -4003,7 +4021,7 @@ export const ChatDirect = ({
               ) : (
                 <>
                   <SendIcon sx={{ fontSize: '18px' }} />
-                  Send
+                  {t('group:dashboard.send')}
                 </>
               )}
             </CustomButton>

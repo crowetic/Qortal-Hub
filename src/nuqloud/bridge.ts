@@ -4,6 +4,7 @@ import { installResources } from '../hosted/resources';
 
 export type ChatConfiguration = {
   contractVersion: 1;
+  features?: { direct: boolean };
   context: string;
   account: { walletId: string; address: string; name: string };
   expiresAt: number;
@@ -24,7 +25,24 @@ const pending = new Map<
 >();
 const listeners = new Map<string, Set<(payload: any) => void>>();
 const subscriptions = new Map<string, [number, string]>();
-let cursor = 0;
+let cursor = 0,
+  directCursor = 0;
+let directEnabled = false;
+const directMethods = new Set([
+  'getDirectAuthorStreamId',
+  'getDirectHistory',
+  'getDirectSummaries',
+  'markDirectRead',
+  'getDirectExpiryPreference',
+  'setDirectExpiryPreference',
+  'setActiveDirectChat',
+]);
+export async function enableDirectChat() {
+  if (!configuration.features?.direct)
+    throw new Error(i18n.t('reticulum:nuqloud.unsupported'));
+  await parentRequest('directConsent');
+  directEnabled = true;
+}
 let stopped = false;
 let disconnected = false;
 let timer: ReturnType<typeof setTimeout>;
@@ -98,8 +116,13 @@ export const rpc = async (method: string, args: unknown[] = []) => {
     ]);
   if (method === 'unsubscribeChannel')
     subscriptions.delete(`${args[0]}:${args[1]}`);
+  const directSilence =
+    (['getSilence', 'setSilence', 'clearSilence'].includes(method) &&
+      args[2] === 'dm') ||
+    (method === 'listSilences' && args[1] === 'dm');
   const response = await parentRequest('rpc', {
-    method,
+    method:
+      directMethods.has(method) || directSilence ? `dm:${method}` : method,
     args: JSON.parse(encodeWire(args)),
   });
   if (response?.contractVersion !== 1)
@@ -112,6 +135,19 @@ async function poll() {
   try {
     const result = await rpc('poll', [cursor]);
     if (stopped) return;
+    if (directEnabled) {
+      const direct = await rpc('dm:pollDirect', [directCursor]);
+      if (stopped) return;
+      directCursor = direct.cursor;
+      for (const event of direct.events ?? [])
+        emit(
+          event.channel === 'onDirectSilenceChanged'
+            ? 'onSilenceChanged'
+            : event.channel,
+          event.payload
+        );
+      if (direct.resync || disconnected) emit('onDirectResync', undefined);
+    }
     cursor = result.cursor;
     for (const event of result.events ?? []) emit(event.channel, event.payload);
     if (result.resync || disconnected) emit('presence:resync', undefined);
@@ -165,6 +201,8 @@ export function initializeBridge(
         void i18n.changeLanguage(next.language || 'en');
         const api: Record<string, any> = {};
         const methods = [
+          ...directMethods,
+          'publishDirectEvent',
           'getReadinessStatus',
           'getChannelMetadataBundle',
           'getChannels',
@@ -205,6 +243,9 @@ export function initializeBridge(
         for (const method of methods)
           api[method] = (...args: any[]) => rpc(method, args);
         for (const name of [
+          'onDirectEvent',
+          'onDirectSummaryChanged',
+          'onDirectResync',
           'onEvent',
           'onSummaryChanged',
           'onTyping',
@@ -214,6 +255,10 @@ export function initializeBridge(
         ])
           api[name] = (callback: (payload: any) => void) =>
             onChatEvent(name, callback);
+        api.publishDirectEvent = (...args: any[]) =>
+          rpc('dm:publishDirectEvent', args);
+        api.sendDirectTyping = async () => ({ success: false });
+        api.onDirectTyping = () => () => {};
         api.isEnabled = async () => true;
         api.sendTyping = async () => ({ success: false });
         api.updateMentionBadge = async () => ({ success: true });

@@ -14,7 +14,11 @@ export interface HubApiPrincipal {
   publicKey: string;
 }
 
-export type HubApiScope = 'QCHAT_READ' | 'QCHAT_PUBLISH';
+export type HubApiScope =
+  | 'QCHAT_READ'
+  | 'QCHAT_PUBLISH'
+  | 'QCHAT_DM_READ'
+  | 'QCHAT_DM_PUBLISH';
 export type HubApiAuthorize = (
   token: string,
   scope: HubApiScope

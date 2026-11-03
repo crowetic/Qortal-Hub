@@ -129,6 +129,14 @@
     "return_to_chat": "Retour au chat"
   },
   "nuqloud": {
+    "direct_messages": "Messages privés",
+    "dm_empty": "Aucune conversation privée pour le moment.",
+    "dm_invalid_peer": "Saisissez une adresse Qortal valide ou un nom enregistré exact.",
+    "dm_list": "Conversations",
+    "dm_open": "Ouvrir le chat",
+    "dm_recipient": "Nom ou adresse Qortal",
+    "dm_unread": "Non lus : {{count}}",
+    "groups": "Groupes",
     "no_groups": "Rejoignez un groupe Qortal pour commencer à discuter.",
     "request_failed": "La demande de discussion a échoué. Vérifiez la connexion et réessayez.",
     "session_ended": "Votre session de discussion est terminée. Déverrouillez votre portefeuille ou actualisez la page.",

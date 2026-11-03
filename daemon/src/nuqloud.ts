@@ -45,6 +45,46 @@ const methods = new Set([
   'requestResource',
   'cancelResource',
 ]);
+const directMethods = new Set([
+  'getSilence',
+  'listSilences',
+  'setSilence',
+  'clearSilence',
+  'getDirectAuthorStreamId',
+  'getDirectHistory',
+  'getDirectSummaries',
+  'markDirectRead',
+  'getDirectExpiryPreference',
+  'setDirectExpiryPreference',
+  'setActiveDirectChat',
+  'publishDirectEvent',
+  'requestDirectResource',
+  'cancelResource',
+]);
+const conversation = (a: string, b: string) =>
+  createHash('sha256')
+    .update(`rchat-dm-v1:${[a, b].sort().join(':')}`)
+    .digest('hex');
+function directReadable(worker: AccountWorker, payload: any): boolean {
+  const event = payload?.event ?? payload?.lastEvent ?? payload;
+  const local = worker.principal.address;
+  if (payload?.scopeType === 'dm')
+    return (
+      payload.ownerAddress === local &&
+      typeof payload.targetAddress === 'string' &&
+      payload.scopeId === conversation(local, payload.targetAddress)
+    );
+  if (event?.senderAddress && event?.recipientAddress)
+    return (
+      [event.senderAddress, event.recipientAddress].includes(local) &&
+      event.conversationId ===
+        conversation(event.senderAddress, event.recipientAddress)
+    );
+  return (
+    typeof payload?.peerAddress === 'string' &&
+    payload.conversationId === conversation(local, payload.peerAddress)
+  );
+}
 type QueuedEvent = {
   cursor: number;
   channel: string;
@@ -81,12 +121,23 @@ function queueFor(worker: AccountWorker) {
       queue!.bytes -= removed.bytes;
     }
   };
+  worker.manager.on('directEvent', (payload) =>
+    append('onDirectEvent', payload)
+  );
+  worker.manager.on('directSummaryChanged', (payload) =>
+    append('onDirectSummaryChanged', payload)
+  );
   worker.manager.on('event', (payload) => append('onEvent', payload));
   worker.manager.on('summaryChanged', (payload) =>
     append('onSummaryChanged', payload)
   );
   worker.manager.on('silenceChanged', (payload) =>
-    append('onSilenceChanged', payload)
+    append(
+      payload?.scopeType === 'dm'
+        ? 'onDirectSilenceChanged'
+        : 'onSilenceChanged',
+      payload
+    )
   );
   worker.manager.on('resource', (payload) => append('onResource', payload));
   worker.presence?.on('presence-updated', (payload) =>
@@ -126,7 +177,11 @@ export function nuqloudAccount(
   const queue = queueFor(worker);
   return {
     available: existsSync(path.join(uiRoot, 'index.html')),
-    async request(body: Record<string, any>) {
+    async request(
+      body: Record<string, any>,
+      direct = false,
+      publishing = false
+    ) {
       const { method } = body;
       let args: any[];
       try {
@@ -142,6 +197,49 @@ export function nuqloudAccount(
       )
         throw new HubApiError(400, 'invalid_chat_request');
       worker.runtime.assertAccount();
+      if (
+        ['getSilence', 'setSilence', 'clearSilence', 'listSilences'].includes(
+          method
+        )
+      ) {
+        const index = method === 'listSilences' ? 1 : 2;
+        if (!direct && method === 'listSilences' && args[index] === undefined)
+          args[index] = 'group';
+        if (args[index] !== (direct ? 'dm' : 'group'))
+          throw new HubApiError(403, 'scope_required');
+      }
+      if (direct && !directMethods.has(method) && method !== 'pollDirect')
+        throw new HubApiError(400, 'chat_method_not_allowed');
+      if (
+        direct &&
+        ['publishDirectEvent', 'setDirectExpiryPreference'].includes(method) &&
+        !publishing
+      )
+        throw new HubApiError(403, 'scope_required');
+      if (direct && directMethods.has(method)) {
+        if (method === 'publishDirectEvent') {
+          if (
+            !directReadable(worker, { event: args[0] }) ||
+            args[0]?.senderAddress !== worker.principal.address ||
+            args[0]?.senderPublicKey !== worker.principal.publicKey
+          )
+            throw new HubApiError(403, 'hub_account_mismatch');
+        } else {
+          if (args[0] !== worker.principal.address)
+            throw new HubApiError(403, 'hub_account_mismatch');
+          if (method === 'getDirectHistory')
+            args[2] = Math.min(200, Math.max(1, Number(args[2]) || 100));
+        }
+        const result = await invokeHosted(
+          worker,
+          `reticulumChat:${method}`,
+          args,
+          () => {}
+        );
+        if (Buffer.byteLength(JSON.stringify(result ?? null)) > 2800000)
+          throw new HubApiError(413, 'chat_response_too_large');
+        return result ?? null;
+      }
       if (method === 'getPublicGroupDiscovery') {
         if (args.length !== 0)
           throw new HubApiError(400, 'invalid_chat_request');
@@ -199,7 +297,7 @@ export function nuqloudAccount(
           encodeWire(await invokeHosted(worker, method, args, () => {}))
         );
       }
-      if (method === 'poll') {
+      if (method === 'poll' || method === 'pollDirect') {
         const cursor = args[0] ?? 0;
         if (!Number.isSafeInteger(cursor) || cursor < 0)
           throw new HubApiError(400, 'invalid_cursor');
@@ -215,8 +313,12 @@ export function nuqloudAccount(
           }
           next = item.cursor;
           if (
-            item.channel !== 'onPresenceUpdate' &&
-            !readable(worker, item.payload)
+            direct
+              ? !item.channel.startsWith('onDirect') ||
+                !directReadable(worker, item.payload)
+              : item.channel.startsWith('onDirect') ||
+                (item.channel !== 'onPresenceUpdate' &&
+                  !readable(worker, item.payload))
           )
             continue;
           events.push({ channel: item.channel, payload: item.payload });

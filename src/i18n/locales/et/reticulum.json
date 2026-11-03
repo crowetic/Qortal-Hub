@@ -129,6 +129,14 @@
     "return_to_chat": "Tagasi vestlusesse"
   },
   "nuqloud": {
+    "direct_messages": "Privaatsõnumid",
+    "dm_empty": "Privaatvestlusi veel pole.",
+    "dm_invalid_peer": "Sisesta kehtiv Qortali aadress või täpne registreeritud nimi.",
+    "dm_list": "Vestlused",
+    "dm_open": "Ava vestlus",
+    "dm_recipient": "Qortali nimi või aadress",
+    "dm_unread": "Lugemata: {{count}}",
+    "groups": "Grupid",
     "no_groups": "Vestlemise alustamiseks liitu Qortali grupiga.",
     "request_failed": "Vestluspäringut ei saanud lõpule viia. Kontrolli ühenduse olekut ja proovi uuesti.",
     "session_ended": "Sinu vestlusseanss lõppes. Ava rahakott või värskenda lehte.",

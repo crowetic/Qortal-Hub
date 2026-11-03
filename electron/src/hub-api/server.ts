@@ -85,7 +85,11 @@ export type HubAccountResolver = (
   runtime: HubApiRuntime;
   nuqloud?: {
     available: boolean;
-    request(body: Record<string, any>): Promise<unknown>;
+    request(
+      body: Record<string, any>,
+      direct?: boolean,
+      publishing?: boolean
+    ): Promise<unknown>;
     asset(name: string): Promise<unknown>;
   };
 }>;
@@ -160,8 +164,12 @@ export async function startHubApi(
     if (!['GET', 'POST'].includes(request.method || ''))
       throw new HubApiError(405, 'method_not_allowed');
     const requestedWallet = request.headers['x-qortal-hub-wallet-id'];
-    const scope =
-      request.method === 'POST' && url.pathname !== '/v1/nuqloud/read'
+    const direct = /^\/v1\/nuqloud\/direct\/(read|write)$/.test(url.pathname);
+    const scope: HubApiScope = direct
+      ? url.pathname.endsWith('/write')
+        ? 'QCHAT_DM_PUBLISH'
+        : 'QCHAT_DM_READ'
+      : request.method === 'POST' && url.pathname !== '/v1/nuqloud/read'
         ? 'QCHAT_PUBLISH'
         : 'QCHAT_READ';
     let accountConfig = config;
@@ -204,18 +212,27 @@ export async function startHubApi(
     }
     if (
       request.method === 'POST' &&
-      ['/v1/nuqloud/read', '/v1/nuqloud/write'].includes(url.pathname) &&
+      [
+        '/v1/nuqloud/read',
+        '/v1/nuqloud/write',
+        '/v1/nuqloud/direct/read',
+        '/v1/nuqloud/direct/write',
+      ].includes(url.pathname) &&
       nuqloud
     ) {
       const body = await readJson(request);
       if (
         String(body.method).startsWith('upload:') &&
-        scope !== 'QCHAT_PUBLISH'
+        !['QCHAT_PUBLISH', 'QCHAT_DM_PUBLISH'].includes(scope)
       )
         throw new HubApiError(403, 'scope_required');
       json(response, 200, {
         contractVersion: 1,
-        result: await nuqloud.request(body),
+        result: await nuqloud.request(
+          body,
+          direct,
+          scope === 'QCHAT_DM_PUBLISH'
+        ),
       });
       return;
     }
@@ -227,7 +244,12 @@ export async function startHubApi(
         walletId: accountConfig.walletId,
         groupIds: accountConfig.groupIds,
         reticulum: runtime.transportStatus(),
-        ...(nuqloud ? { nuqloudChatTransport: nuqloud.available ? 1 : 0 } : {}),
+        ...(nuqloud
+          ? {
+              nuqloudChatTransport: nuqloud.available ? 1 : 0,
+              nuqloudDirectTransport: nuqloud.available ? 1 : 0,
+            }
+          : {}),
       });
       return;
     }
