@@ -47,9 +47,17 @@ another dialog; unrelated capabilities still require approval. Account access
 and microphone permission remain separate.
 
 Permission and connections are isolated by trusted tab, service, application
-name, and destination. Closing or reloading the tab removes its logical
-connections. This initial version does not consume a destination declared in
-QDN metadata because no owner-signed metadata field exists yet.
+name, and destination. Closing the tab removes its logical connections;
+desktop guest navigation also revokes the old document's connections. Hosted
+iframe self-reload does not unmount the owning Hub tab, so generic document
+reload cleanup is not yet guaranteed. Q-Apps should close their connection on
+`pagehide` as best effort and establish a fresh backend session after reload.
+Unreleased hosted IDs remain bounded by the existing eight-connections-per-owner
+limit and are removed on tab closure or hosted socket reset. A future
+document-lifecycle handshake is needed to guarantee reload cleanup without
+closing an early request from the replacement document. This initial version
+does not consume a destination declared in QDN metadata because no owner-signed
+metadata field exists yet.
 
 ## Backend account proof
 
