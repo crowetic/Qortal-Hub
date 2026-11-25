@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { QAppReticulumManager } from '../../../electron/src/qapp-reticulum-manager';
+import { QAppReticulumBridgeTransport } from '../../../electron/src/qapp-reticulum-bridge-transport';
 import { PrivateChannelManager } from '../../../electron/src/private-channel-manager';
 import { QAppMoqTransportManager } from '../../../electron/src/moq-transport-manager';
 import { PrivateTransportSidecar } from '../../../electron/src/private-transport-sidecar';
@@ -26,16 +27,9 @@ export class HostedQapps {
     emit: (channel: string, payload: any) => void
   ) {
     const bridge = worker.bridge;
-    this.rns = new QAppReticulumManager({
-      invoke: (action, payload) =>
-        bridge.invokeQAppReticulum(action as any, payload),
-      onEvent: (listener) => {
-        bridge.on('qapp-rns', listener);
-        return () => {
-          bridge.off('qapp-rns', listener);
-        };
-      },
-    });
+    this.rns = new QAppReticulumManager(
+      new QAppReticulumBridgeTransport(async () => bridge)
+    );
     this.sidecar = new PrivateTransportSidecar({
       command: path.join(
         worker.config.resourcesDir,
@@ -73,6 +67,12 @@ export class HostedQapps {
       emit('qapp:private', payload)
     );
     this.moq.on('event', (payload) => emit('qapp:moq', payload));
+    this.rns.on('connection-closed', (owner, connectionId) => {
+      void Promise.allSettled([
+        this.privateChannels.cleanupRnsConnection(owner, connectionId),
+        this.moq.cleanupRnsConnection(owner, connectionId),
+      ]);
+    });
   }
   async invoke(channel: string, args: any[]) {
     const [owner, ...rest] = args;
@@ -82,7 +82,8 @@ export class HostedQapps {
         (key) =>
           typeof owner[key] === 'string' &&
           owner[key].length > 0 &&
-          owner[key].length <= 256
+          owner[key].length <= 256 &&
+          !/\p{Cc}/u.test(owner[key])
       )
     )
       throw new Error('invalid_qapp_owner');

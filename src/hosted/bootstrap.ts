@@ -1,6 +1,7 @@
 import { installResources } from './resources';
 import contract from './browser-contract.json';
 import { HostedClient } from './client';
+import { installHostedQappReticulum } from './qapp-reticulum';
 import i18n from '../i18n/i18n';
 
 export interface HostedConfig {
@@ -187,11 +188,6 @@ export function installHosted(config: HostedConfig) {
   };
   hostWindow.hub = { getIceServers: async () => config.iceServers ?? [] };
   const qappMethods = {
-    qappReticulumRequest: 'qapp:rns:request',
-    qappReticulumConnect: 'qapp:rns:connect',
-    qappReticulumSend: 'qapp:rns:send',
-    qappReticulumClose: 'qapp:rns:close',
-    qappReticulumCleanupOwner: 'qapp:cleanup',
     privateChannelOpen: 'qapp:private:open',
     privateChannelSend: 'qapp:private:send',
     privateChannelStatus: 'qapp:private:status',
@@ -203,13 +199,11 @@ export function installHosted(config: HostedConfig) {
     qappMoqMetrics: 'qapp:moq:metrics',
     qappMoqClose: 'qapp:moq:close',
     qappMoqCleanupOwner: 'qapp:cleanup',
-    qappGuestRelease: 'qapp:cleanup',
   };
   for (const [name, channel] of Object.entries(qappMethods))
     hostWindow.electronAPI[name] = (...args: unknown[]) =>
       rpc(channel, ...args);
-  hostWindow.electronAPI.onQAppReticulumEvent = (callback: any) =>
-    client.on('qapp:rns', callback);
+  installHostedQappReticulum(client, hostWindow.electronAPI);
   hostWindow.electronAPI.onPrivateChannelEvent = (callback: any) =>
     client.on('qapp:private', callback);
   hostWindow.electronAPI.onQAppMoqEvent = (callback: any) =>

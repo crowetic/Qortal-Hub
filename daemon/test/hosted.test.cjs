@@ -161,7 +161,8 @@ test(
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hub-hosted-'));
     const wallets = [wallet(), wallet()];
     let output = '',
-      hub;
+      hub,
+      backend;
     const clients = [];
     const ports = await Promise.all([port(), port(), port(), port()]);
     const [api, browser, rns, control] = ports;
@@ -228,6 +229,94 @@ test(
       });
       for (const w of wallets) clients.push(await connect(url, w));
       const [a, b] = clients;
+      // The same public Q-App API reaches an actual Python Reticulum backend.
+      // Its echo protocol is deliberately transport-only: app authentication and
+      // durable mutation acknowledgements belong to the application backend.
+      let backendOutput = '';
+      backend = spawn(
+        env.QORTAL_HUB_PYTHON || path.join(root, '.venv/bin/python'),
+        [
+          '-u',
+          path.join(root, '../examples/qapp-reticulum/backend.py'),
+          '--config',
+          path.join(directory, 'rns'),
+          '--identity',
+          path.join(directory, 'qapp-backend.identity'),
+        ],
+        { stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+      for (const stream of [backend.stdout, backend.stderr])
+        stream.on('data', (chunk) => {
+          backendOutput = (backendOutput + chunk).slice(-10000);
+        });
+      await until(
+        () => /Destination: <[0-9a-f]{32}>/.test(backendOutput),
+        'Q-App backend announce: ' + backendOutput
+      );
+      const destination = backendOutput.match(
+        /Destination: <([0-9a-f]{32})>/
+      )[1];
+      const owner = {
+        tabId: 'incident-tab',
+        name: 'incident-operations',
+        service: 'APP',
+      };
+      const requestId = randomUUID();
+      assert.deepEqual(
+        await a.rpc('qapp:rns:request', owner, {
+          destination,
+          path: '/hello',
+          payload: { name: 'Hosted Q-App' },
+          requestId,
+        }),
+        { message: 'Hello, Hosted Q-App', requestId }
+      );
+      const connection = await a.rpc('qapp:rns:connect', owner, destination);
+      assert.equal(connection.state, 'CONNECTED');
+      await assert.rejects(
+        b.rpc('qapp:rns:send', owner, connection.connectionId, {
+          forged: true,
+        }),
+        /operation_failed/
+      );
+      await assert.rejects(
+        a.rpc(
+          'qapp:rns:send',
+          { ...owner, name: 'another-app' },
+          connection.connectionId,
+          {}
+        ),
+        /operation_failed/
+      );
+      const marker = randomUUID();
+      assert.ok(
+        (
+          await a.rpc('qapp:rns:send', owner, connection.connectionId, {
+            marker,
+          })
+        ).messageId
+      );
+      await until(
+        () =>
+          a.events.some(
+            (event) =>
+              event.channel === 'qapp:rns' &&
+              event.payload.action === 'RNS_MESSAGE' &&
+              event.payload.connectionId === connection.connectionId &&
+              event.payload.payload?.received?.marker === marker
+          ),
+        'actual Reticulum Q-App stream echo'
+      );
+      assert.ok(
+        !b.events.some(
+          (event) => event.payload?.connectionId === connection.connectionId
+        )
+      );
+      await a.rpc('qapp:cleanup', owner);
+      await assert.rejects(
+        a.rpc('qapp:rns:send', owner, connection.connectionId, {}),
+        /operation_failed/
+      );
       for (const c of clients) {
         const timestamp = Date.now();
         const sessionId = `P${Buffer.from(c.info.destinationHash, 'hex').toString('base64url')}${randomBytes(10).toString('base64url').slice(0, 13)}`;
@@ -615,6 +704,13 @@ test(
       throw error;
     } finally {
       for (const c of clients) c.ws.close();
+      if (backend && backend.exitCode === null) {
+        const done = new Promise((resolve) => backend.once('exit', resolve));
+        backend.kill('SIGTERM');
+        const timeout = setTimeout(() => backend.kill('SIGKILL'), 5000);
+        await done;
+        clearTimeout(timeout);
+      }
       if (hub && hub.exitCode === null) {
         const done = new Promise((r) => hub.once('exit', r));
         hub.kill('SIGTERM');
