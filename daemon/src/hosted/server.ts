@@ -12,6 +12,26 @@ import { invokeHosted } from './rpc';
 import { HostedFiles } from './files';
 import { HostedQapps } from './qapps';
 
+// Keep diagnostics useful without exposing wallet proofs or arbitrary upstream
+// error messages. These codes are controlled by the hosted session protocol.
+const sessionFailureCodes = new Set([
+  'invalid_frame',
+  'authentication_required',
+  'invalid_client_id',
+  'invalid_identity',
+  'invalid_signature',
+  'client_in_use',
+  'account_limit',
+  'core_unavailable',
+  'core_invalid_memberships',
+  'core_invalid_members',
+  'upstream_unavailable',
+  'upstream_invalid_response',
+  'upstream_response_too_large',
+  'reticulum_identity_unavailable',
+  'invalid_rpc',
+]);
+
 export async function startHostedServer(config: DaemonConfig) {
   const server = createServer((_req, res) => {
     res.writeHead(404);
@@ -115,7 +135,17 @@ export async function startHostedServer(config: DaemonConfig) {
     };
     const emit = (channel: string, payload?: unknown) =>
       send({ type: 'event', channel, payload });
-    const authTimer = setTimeout(() => ws.close(1008), 15_000);
+    const fail = (reason: string) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const phase = worker
+        ? 'ready'
+        : authenticating
+          ? 'starting'
+          : 'challenge';
+      console.warn(`[hosted] session_closed phase=${phase} reason=${reason}`);
+      ws.close(1008, reason);
+    };
+    const authTimer = setTimeout(() => fail('authentication_timeout'), 15_000);
     const sweep = setInterval(() => {
       if (!alive) {
         ws.terminate();
@@ -171,7 +201,13 @@ export async function startHostedServer(config: DaemonConfig) {
         ws.close(1008);
         return;
       }
-      void message(data.toString()).catch(() => ws.close(1008));
+      void message(data.toString()).catch((error) =>
+        fail(
+          error instanceof Error && sessionFailureCodes.has(error.message)
+            ? error.message
+            : 'session_failed'
+        )
+      );
     });
     async function message(text: string) {
       const msg = decodeWire(text);
@@ -223,8 +259,8 @@ export async function startHostedServer(config: DaemonConfig) {
         )
           throw new Error('invalid_signature');
         accountKey = `${address}:${clientId}`;
-        if (active.has(accountKey) || active.size >= config.maxAccounts)
-          throw new Error('account_limit');
+        if (active.has(accountKey)) throw new Error('client_in_use');
+        if (active.size >= config.maxAccounts) throw new Error('account_limit');
         active.set(accountKey, ws);
         const signer = (
           kind: 'presence' | 'chat',

@@ -55,9 +55,9 @@ async function connect(
       25000
     );
     ws.on('error', reject);
-    ws.once('close', () => {
+    ws.once('close', (code, reason) => {
       clearTimeout(timeout);
-      reject(new Error('session closed'));
+      reject(new Error(`session closed ${code}: ${reason}`));
     });
     ws.on('message', (data) => {
       const msg = JSON.parse(data.toString(), (_key, value) =>
@@ -220,7 +220,11 @@ test(
         }
       }, 'daemon startup');
       const url = `ws://127.0.0.1:${browser}/realtime`;
-      await assert.rejects(connect(url, wallets[0], true));
+      await assert.rejects(
+        connect(url, wallets[0], true),
+        /session closed 1008: invalid_signature/
+      );
+      assert.ok(output.includes('phase=starting reason=invalid_signature'));
       const rejectedOrigin = new WebSocket(url, {
         origin: 'https://evil.test',
       });
@@ -228,6 +232,10 @@ test(
         rejectedOrigin.once('error', resolve);
       });
       for (const w of wallets) clients.push(await connect(url, w));
+      await assert.rejects(
+        connect(url, wallets[0], false, clients[0].clientId),
+        /session closed 1008: client_in_use/
+      );
       const [a, b] = clients;
       // The same public Q-App API reaches an actual Python Reticulum backend.
       // Its echo protocol is deliberately transport-only: app authentication and
