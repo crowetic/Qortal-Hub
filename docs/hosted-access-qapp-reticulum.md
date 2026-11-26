@@ -88,12 +88,24 @@ recovery.
 
 ## Verification
 
+The event subscription must not depend on the iframe ref already being set.
+`AppViewer` resolves its initial URL after mounting, so the first hook effect
+runs before the hosted iframe exists. Subscribe for the trusted tab immediately
+and resolve its current connected view and exact target origin at delivery.
+Otherwise requests succeed and backend authentication can complete while every
+stream reply is lost. The same subscription carries RNS, private-channel and
+MOQ events; the exact owner-key and cross-origin checks remain required.
+`AppViewerHostedEvents.test.tsx` uses the real viewer and hook to reproduce this
+mount order, check reply forwarding and verify wrong-owner, shell-origin and
+unmounted-view rejection. It fails on the previous implementation.
+
 From this worktree, with normal project dependencies installed, Node >=22.12,
 and `npm run setup:reticulum --prefix daemon` completed:
 
 ```bash
 npx vitest run src/hosted/qapp-reticulum.test.ts src/hosted/client.test.ts \
   src/hosted/qapp-frame.test.ts src/qortal/qapp-reticulum-request.test.ts \
+  src/components/Apps/__tests__/AppViewerHostedEvents.test.tsx \
   electron/src/hosted-qapp-lifecycle.test.ts \
   electron/src/qapp-reticulum-manager.test.ts \
   electron/src/qapp-reticulum-bridge-transport.test.ts

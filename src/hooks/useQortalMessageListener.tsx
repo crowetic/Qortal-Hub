@@ -986,8 +986,10 @@ export const useQortalMessageListener = (
   useEffect(() => {
     const api = window.electronAPI;
     const hosted = Boolean((window as Window & { hubHosted?: boolean }).hubHosted);
-    const nativeView = nativeGuestActive || hosted ? nativeViewRef?.current : null;
-    if (!api || !nativeView || tabId == null || !appName) return;
+    // Hosted AppViewer mounts its iframe after resolving the initial URL. The
+    // ref can be empty on this effect's first run without any dependency later
+    // changing. Subscribe now and resolve the current view for each delivery.
+    if (!api || (!nativeGuestActive && !hosted) || tabId == null || !appName) return;
     let identity;
     try {
       identity = normalizeQappIdentityContext({
@@ -1004,7 +1006,8 @@ export const useQortalMessageListener = (
     };
     const expectedOwnerKey = `${owner.tabId}\u0000${owner.service}\u0000${owner.name}`;
     const postToApp = (payload) => {
-      if (!nativeView.isConnected) return;
+      const nativeView = nativeViewRef?.current;
+      if (!nativeView?.isConnected) return;
       if (hosted && nativeView.contentWindow) {
         const origin = new URL(nativeView.src).origin;
         if (origin !== location.origin) nativeView.contentWindow.postMessage(payload, origin);
